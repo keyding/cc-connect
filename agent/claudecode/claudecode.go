@@ -473,18 +473,38 @@ func (a *Agent) SetPlatformPrompt(prompt string) {
 // resume a session whose stored ID was inherited from another project, the
 // engine calls this and — on a false return — clears the ID and starts a
 // fresh session instead of reloading the wrong conversation.
-func (a *Agent) ValidateSessionID(_ context.Context, sessionID string) bool {
+func (a *Agent) ValidateSessionID(ctx context.Context, sessionID string) bool {
+	valid, err := a.CheckSessionID(ctx, sessionID)
+	if err != nil {
+		slog.Warn("claudecode: session validation failed", "error", err)
+	}
+	return valid
+}
+
+func (a *Agent) CheckSessionID(ctx context.Context, sessionID string) (bool, error) {
 	if sessionID == "" {
-		return false
+		return false, nil
+	}
+	a.mu.RLock()
+	runAsUser, workDir := a.spawnOpts.RunAsUser, a.workDir
+	a.mu.RUnlock()
+	if runAsUser != "" {
+		sessions, err := listSessionsAsUser(ctx, runAsUser, workDir)
+		if err != nil {
+			return false, err
+		}
+		for _, session := range sessions {
+			if session.ID == sessionID {
+				return true, nil
+			}
+		}
+		return false, nil
 	}
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return false
+		return false, nil
 	}
-	a.mu.RLock()
-	workDir := a.workDir
-	a.mu.RUnlock()
-	return validateSessionIDInProject(homeDir, workDir, sessionID)
+	return validateSessionIDInProject(homeDir, workDir, sessionID), nil
 }
 
 // validateSessionIDInProject checks whether sessionID has a .jsonl file
@@ -557,14 +577,24 @@ func (a *Agent) StartSession(ctx context.Context, sessionID string) (core.AgentS
 }
 
 func (a *Agent) ListSessions(ctx context.Context) ([]core.AgentSessionInfo, error) {
+	a.mu.RLock()
+	workDir, runAsUser := a.workDir, a.spawnOpts.RunAsUser
+	a.mu.RUnlock()
+	if runAsUser != "" {
+		return listSessionsAsUser(ctx, runAsUser, workDir)
+	}
+	return ListLocalSessions(workDir)
+}
+
+// ListLocalSessions reads metadata using the current process user's HOME.
+// The internal CLI helper runs this same reader under run_as_user, without
+// starting a platform, loading the supervisor config, or invoking the model.
+func ListLocalSessions(workDir string) ([]core.AgentSessionInfo, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("claudecode: cannot determine home dir: %w", err)
 	}
 
-	a.mu.RLock()
-	workDir := a.workDir
-	a.mu.RUnlock()
 	absWorkDir, err := filepath.Abs(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("claudecode: resolve work_dir: %w", err)
@@ -613,27 +643,52 @@ func (a *Agent) ListSessions(ctx context.Context) ([]core.AgentSessionInfo, erro
 	return sessions, nil
 }
 
-func (a *Agent) DeleteSession(_ context.Context, sessionID string) error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("claudecode: cannot determine home dir: %w", err)
+func (a *Agent) DeleteSession(ctx context.Context, sessionID string) error {
+	if !validDeleteSessionID(sessionID) {
+		return fmt.Errorf("invalid session ID")
 	}
 	a.mu.RLock()
-	workDir := a.workDir
+	workDir, user := a.workDir, a.spawnOpts.RunAsUser
 	a.mu.RUnlock()
+	if user != "" {
+		return deleteSessionAsUser(ctx, user, workDir, sessionID)
+	}
+	return DeleteLocalSession(workDir, sessionID)
+}
+
+func validDeleteSessionID(id string) bool {
+	return id != "" && id != "." && id != ".." && !strings.ContainsAny(id, "/\\\x00")
+}
+
+// DeleteLocalSession deletes exactly one transcript from this account's project.
+func DeleteLocalSession(workDir, sessionID string) error {
+	if !validDeleteSessionID(sessionID) {
+		return fmt.Errorf("invalid session ID")
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("claudecode: delete session: %w", err)
+	}
 	absWorkDir, err := filepath.Abs(workDir)
 	if err != nil {
-		return fmt.Errorf("claudecode: resolve work_dir: %w", err)
+		return fmt.Errorf("claudecode: delete session: %w", err)
 	}
 	projectDir := findProjectDir(homeDir, absWorkDir)
 	if projectDir == "" {
 		return fmt.Errorf("session not found")
 	}
 	path := filepath.Join(projectDir, sessionID+".jsonl")
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return fmt.Errorf("session file not found: %s", sessionID)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("claudecode: delete session: %w", err)
 	}
-	return os.Remove(path)
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("session transcript is not a regular file")
+	}
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("claudecode: remove transcript: %w", err)
+	}
+	return nil
 }
 
 // extractStringContent attempts to extract a plain string from a json.RawMessage.

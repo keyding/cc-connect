@@ -512,6 +512,7 @@ type ContextUsage struct {
 	CacheCreationInputTokens int // cache-write tokens (new content written to cache)
 	OutputTokens             int
 	ReasoningOutputTokens    int
+	ContextWindowEstimated   bool // Capacity inferred by the adapter rather than reported.
 	ContextWindow            int
 }
 
@@ -674,4 +675,21 @@ const (
 // updating the visual status of a preview card header.
 type PreviewStatusUpdater interface {
 	SetPreviewStatus(previewHandle any, status CardStatus)
+}
+
+// CompactReplyFooter opts into a footer containing only model and reported context.
+type CompactReplyFooter interface {
+	CompactReplyFooter() bool
+}
+
+// PendingSessionRouteMatcher permits draft discovery across routes owned by the
+// same user in the same chat. Platforms own their route encoding.
+type PendingSessionRouteMatcher interface {
+	PendingSessionRouteMatches(a, b string) bool
+}
+
+// SessionIDValidationChecker distinguishes an unavailable session store from a
+// missing transcript. On error the engine preserves the binding and does not start.
+type SessionIDValidationChecker interface {
+	CheckSessionID(ctx context.Context, sessionID string) (bool, error)
 }

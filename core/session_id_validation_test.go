@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -110,5 +111,26 @@ func TestIssue599_AgentWithoutValidatorNotBlocked(t *testing.T) {
 
 	if startedWith != "any-id" {
 		t.Errorf("StartSession called with %q, want %q (no validator = pass through)", startedWith, "any-id")
+	}
+}
+
+type unavailableValidationAgent struct{ controllableAgent }
+
+func (a *unavailableValidationAgent) CheckSessionID(context.Context, string) (bool, error) {
+	return false, errors.New("reader unavailable")
+}
+func TestSessionValidationFailurePreservesHistoryBinding(t *testing.T) {
+	agent := &unavailableValidationAgent{}
+	agent.startSessionFn = func(context.Context, string) (AgentSession, error) {
+		t.Fatal("must not start while session validation is unavailable")
+		return nil, nil
+	}
+	p := &stubPlatformEngine{n: "test"}
+	e := NewEngine("test", agent, []Platform{p}, "", LangEnglish)
+	s := e.sessions.GetOrCreateActive("test:user")
+	s.SetAgentSessionID("saved-history", "test")
+	e.getOrCreateInteractiveStateWith("test:user", p, "ctx", s, e.sessions, nil, "")
+	if got := s.GetAgentSessionID(); got != "saved-history" {
+		t.Fatalf("binding lost: %q", got)
 	}
 }

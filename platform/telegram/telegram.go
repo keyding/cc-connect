@@ -110,6 +110,7 @@ type Platform struct {
 	groupReplyAll         bool
 	shareSessionInChannel bool
 	enableReactions       bool
+	replyToTrigger        bool
 	progressStyle         string // "legacy" | "compact" — telegram has no rich card, so "card" is mapped to "compact"
 	httpClient            *http.Client
 
@@ -163,6 +164,7 @@ func New(opts map[string]any) (core.Platform, error) {
 	groupReplyAll, _ := opts["group_reply_all"].(bool)
 	shareSessionInChannel, _ := opts["share_session_in_channel"].(bool)
 	enableReactions, _ := opts["enable_reactions"].(bool)
+	replyToTrigger, _ := opts["reply_to_trigger"].(bool)
 
 	// Default to "compact" so streaming edits work out of the box. Telegram has
 	// no rich card UI, so "card" is normalized to "compact". Users can opt out
@@ -188,6 +190,7 @@ func New(opts map[string]any) (core.Platform, error) {
 		groupReplyAll:         groupReplyAll,
 		shareSessionInChannel: shareSessionInChannel,
 		enableReactions:       enableReactions,
+		replyToTrigger:        replyToTrigger,
 		progressStyle:         progressStyle,
 		httpClient:            httpClient,
 	}, nil
@@ -1073,7 +1076,7 @@ func (p *Platform) Reply(ctx context.Context, rctx any, content string) error {
 				"method", "Reply",
 				"html_len", len(html),
 			)
-			return p.sendChunked(ctx, bot, rc, html)
+			return p.sendChunked(ctx, bot, rc, html, params.ReplyParameters)
 		}
 		if err != nil {
 			return fmt.Errorf("telegram: send: %w", err)
@@ -1101,6 +1104,10 @@ func (p *Platform) Send(ctx context.Context, rctx any, content string) error {
 		ParseMode:       models.ParseModeHTML,
 	}
 
+	if p.replyToTrigger && rc.messageID > 0 {
+		params.ReplyParameters = &models.ReplyParameters{MessageID: rc.messageID, AllowSendingWithoutReply: true}
+	}
+
 	if _, err := bot.SendMessage(ctx, params); err != nil {
 		errMsg := err.Error()
 		// Handle HTML parsing errors by falling back to plain text
@@ -1120,7 +1127,7 @@ func (p *Platform) Send(ctx context.Context, rctx any, content string) error {
 				"method", "Send",
 				"html_len", len(html),
 			)
-			return p.sendChunked(ctx, bot, rc, html)
+			return p.sendChunked(ctx, bot, rc, html, params.ReplyParameters)
 		}
 		if err != nil {
 			return fmt.Errorf("telegram: send: %w", err)
@@ -1524,7 +1531,7 @@ const telegramMaxMessageLen = 4096
 
 // sendChunked splits a message that's too long and sends it as multiple messages.
 // It uses SplitMessageCodeFenceAware to respect code block boundaries.
-func (p *Platform) sendChunked(ctx context.Context, bot telegramBot, rc replyContext, html string) error {
+func (p *Platform) sendChunked(ctx context.Context, bot telegramBot, rc replyContext, html string, reply *models.ReplyParameters) error {
 	chunks := core.SplitMessageCodeFenceAware(html, telegramMaxMessageLen)
 	for i, chunk := range chunks {
 		params := &tgbot.SendMessageParams{
@@ -1534,7 +1541,7 @@ func (p *Platform) sendChunked(ctx context.Context, bot telegramBot, rc replyCon
 			ParseMode:       models.ParseModeHTML,
 		}
 		if i == 0 && rc.messageID != 0 {
-			params.ReplyParameters = &models.ReplyParameters{MessageID: rc.messageID}
+			params.ReplyParameters = reply
 		}
 		if _, err := bot.SendMessage(ctx, params); err != nil {
 			// If HTML fails, try plain text
@@ -1817,3 +1824,13 @@ func sanitizeTelegramCommand(cmd string) string {
 }
 
 var _ core.AudioSender = (*Platform)(nil)
+
+func (p *Platform) CompactReplyFooter() bool { return true }
+
+func (p *Platform) PendingSessionRouteMatches(a, b string) bool {
+	x, y := strings.Split(a, ":"), strings.Split(b, ":")
+	if (len(x) != 3 && len(x) != 4) || (len(y) != 3 && len(y) != 4) {
+		return false
+	}
+	return x[0] == "telegram" && y[0] == "telegram" && x[1] == y[1] && x[len(x)-1] == y[len(y)-1]
+}

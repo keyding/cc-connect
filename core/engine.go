@@ -4198,7 +4198,21 @@ func (e *Engine) getOrCreateInteractiveStateWith(sessionKey string, p Platform, 
 	// can detect the mismatch and we should clear the ID rather than
 	// resume a conversation that has nothing to do with this project.
 	if startSessionID != "" {
-		if validator, ok := agent.(SessionIDValidator); ok && !validator.ValidateSessionID(e.ctx, startSessionID) {
+		valid := true
+		if checker, ok := agent.(SessionIDValidationChecker); ok {
+			var err error
+			valid, err = checker.CheckSessionID(e.ctx, startSessionID)
+			if err != nil {
+				slog.Warn("session validation unavailable; preserving binding", "session_key", sessionKey, "error", err)
+				newState := &interactiveState{platform: p, replyCtx: replyCtx, agent: agent, eventsNeedResync: true}
+				adoptPendingFromPlaceholder(e.interactiveStates[sessionKey], newState)
+				e.interactiveStates[sessionKey] = newState
+				return newState
+			}
+		} else if validator, ok := agent.(SessionIDValidator); ok {
+			valid = validator.ValidateSessionID(e.ctx, startSessionID)
+		}
+		if !valid {
 			slog.Warn("session ID does not belong to this project, clearing it",
 				"session_key", sessionKey, "invalid_session_id", startSessionID)
 			session.SetAgentSessionID("", agent.Name())
@@ -5917,7 +5931,11 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 						footerContext = fmt.Sprintf("[ctx: ~%d%%]", selfPct)
 					}
 				}
-				if status := e.buildClaudeStatusLineFooter(replyAgent, state.agentSession, workspaceDir); status != "" {
+				if compact, ok := p.(CompactReplyFooter); ok && compact.CompactReplyFooter() {
+					if e.replyFooterEnabled && e.showContextIndicator {
+						statusFooter = e.modelContextFooter(replyFooterModel(state.agentSession, replyAgent), replyFooterSessionContextUsage(state.agentSession))
+					}
+				} else if status := e.buildClaudeStatusLineFooter(replyAgent, state.agentSession, workspaceDir); status != "" {
 					statusFooter = status
 				} else if footer := e.buildReplyFooter(replyAgent, state.agentSession, workspaceDir, footerContext); footer != "" {
 					statusFooter = footer
@@ -7204,6 +7222,7 @@ func (e *Engine) cmdList(p Platform, msg *Message, args []string) {
 			return
 		}
 		agentSessions = e.applySessionFilter(agentSessions, sessions)
+		agentSessions = e.appendPendingSessionEntries(p, agentSessions, sessions, msg.SessionKey)
 		if len(agentSessions) == 0 {
 			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgListEmpty))
 			return
@@ -7231,6 +7250,9 @@ func (e *Engine) cmdList(p Platform, msg *Message, args []string) {
 		agentName := agent.Name()
 		activeSession := sessions.GetOrCreateActive(msg.SessionKey)
 		activeAgentID := activeSession.GetAgentSessionID()
+		if activeAgentID == "" {
+			activeAgentID = "pending:" + activeSession.ID
+		}
 
 		var sb strings.Builder
 		if totalPages > 1 {
@@ -7302,9 +7324,35 @@ func (e *Engine) cmdSwitch(p Platform, msg *Message, args []string) {
 	}
 	agentSessions = e.applySessionFilter(agentSessions, sessions)
 
+	if !supportsCards(p) {
+		agentSessions = e.appendPendingSessionEntries(p, agentSessions, sessions, msg.SessionKey)
+	}
+
 	matched := e.matchSession(agentSessions, sessions, query)
 	if matched == nil {
 		e.reply(p, msg.ReplyCtx, fmt.Sprintf(e.i18n.T(MsgSwitchNoMatch), query))
+		return
+	}
+
+	if strings.HasPrefix(matched.ID, "pending:") {
+		id := strings.TrimPrefix(matched.ID, "pending:")
+		candidates := sessions.pendingSessionsForRoute(p, msg.SessionKey)
+		found := false
+		for _, candidate := range candidates {
+			if candidate.ID == id {
+				found = true
+			}
+		}
+		if !found {
+			e.reply(p, msg.ReplyCtx, e.i18n.Tf(MsgSwitchNoMatch, query))
+			return
+		}
+		e.cleanupInteractiveState(interactiveKey)
+		if err := sessions.activatePendingSession(p, msg.SessionKey, id); err != nil {
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgPendingSessionUnavailable))
+			return
+		}
+		e.cmdCurrent(p, msg)
 		return
 	}
 
@@ -8780,6 +8828,9 @@ func (e *Engine) cmdCurrent(p Platform, msg *Message) {
 			agentID = e.i18n.T(MsgSessionNotStarted)
 		}
 		displayName := e.currentSessionDisplayName(agent, sessions, agentID)
+		if name := s.GetName(); s.GetAgentSessionID() == "" && name != "" && name != "default" && name != "session" {
+			displayName = s.GetName()
+		}
 		e.reply(p, msg.ReplyCtx, fmt.Sprintf(e.i18n.T(MsgCurrentSession), displayName, agentID, len(s.History)))
 		return
 	}

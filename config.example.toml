@@ -21,6 +21,7 @@ mode = "default"
 type = "telegram"
 
 [projects.platforms.options]
+# reply_to_trigger = false # Reply to the triggering message / 引用触发消息
 token = "${TELEGRAM_BOT_TOKEN}"
 allow_from = "${TELEGRAM_ALLOW_FROM}" # Telegram numeric user IDs, comma-separated
 

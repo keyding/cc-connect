@@ -1286,6 +1286,25 @@ func TestCUJ_B1_NewCreatesIndependentSession(t *testing.T) {
 
 // CUJ-B2 · /list shows all sessions for the user.
 func TestCUJ_B2_ListShowsAllSessions(t *testing.T) {
+	t.Run("PendingNamedSessionNumberedSwitch", func(t *testing.T) {
+		env := newCUJEnv(t)
+		env.userSends("draft", "/new image")
+		env.userSends("draft", "/new other")
+		env.plat.clearSent()
+		env.userSends("draft", "/list")
+		got := strings.Join(env.plat.getSent(), "\n")
+		if !strings.Contains(got, "**1.** image (pending)") || !strings.Contains(got, "**2.** other (pending)") {
+			t.Fatalf("numbered pending sessions missing: %s", got)
+		}
+		env.plat.clearSent()
+		env.userSends("draft", "/switch 1")
+		env.userSends("draft", "/current")
+		got = strings.Join(env.plat.getSent(), "\n")
+		if !strings.Contains(got, "image") || strings.Contains(got, "other") || strings.Contains(got, "pending:s") {
+			t.Fatalf("numeric switch did not show the pending image session: %s", got)
+		}
+	})
+
 	env := newCUJEnv(t)
 	key := "test:b2"
 	env.userSends("b2", "hi")
