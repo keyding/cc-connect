@@ -3,7 +3,12 @@
 package claudecode
 
 import (
+	"bufio"
+	"io"
+	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -48,54 +53,73 @@ func TestForceKillCmd_NilCmd(t *testing.T) {
 	}
 }
 
-// TestForceKillCmd_KillsGrandchild is the regression test for the original
-// bug: spawning a shell that backgrounds a long-running grandchild, then
-// proving that forceKillCmd reaps the grandchild along with the direct
-// child via process-group kill. Without prepareCmdForKill setting up the
-// process group, the grandchild would survive and spin.
+// The shell and its grandchild both inherit the pipe's write end. EOF on
+// the read end proves that the grandchild was terminated too. Unlike
+// Cmd.StdoutPipe, this pipe is not closed by Cmd.Wait on the test's behalf.
 func TestForceKillCmd_KillsGrandchild(t *testing.T) {
-	// /bin/sh -c 'sleep 60 & echo $! ; wait'
-	// The grandchild PID is printed on stdout so we can verify it is reaped.
+	stdout, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stdout.Close() })
+	t.Cleanup(func() { _ = writer.Close() })
+
 	cmd := exec.Command("/bin/sh", "-c", "sleep 60 & echo $! ; wait")
 	prepareCmdForKill(cmd)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatalf("stdout pipe: %v", err)
-	}
+	cmd.Stdout = writer
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-
-	// Read the grandchild PID.
-	buf := make([]byte, 32)
-	deadline := time.Now().Add(2 * time.Second)
-	var grandchildPidStr string
-	for time.Now().Before(deadline) {
-		n, _ := stdout.Read(buf)
-		if n > 0 {
-			grandchildPidStr = string(buf[:n])
-			break
+	waited := false
+	t.Cleanup(func() {
+		// Also clean up the grandchild if an assertion fails after the shell exits.
+		if t.Failed() || !waited {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
-		time.Sleep(10 * time.Millisecond)
+		if !waited {
+			_ = cmd.Wait()
+		}
+	})
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
 	}
-	if grandchildPidStr == "" {
-		_ = forceKillCmd(cmd)
-		_ = cmd.Wait()
-		t.Fatal("did not receive grandchild PID")
+	if err := stdout.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	reader := bufio.NewReader(stdout)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read grandchild PID: %v", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(line))
+	if err != nil || pid <= 0 {
+		t.Fatalf("invalid grandchild PID %q", line)
 	}
 
 	if err := forceKillCmd(cmd); err != nil {
 		t.Fatalf("forceKillCmd: %v", err)
 	}
 	_ = cmd.Wait()
+	waited = true
 
-	// Verify the grandchild is gone by checking that signaling it with 0
-	// (no-op, just checks existence) returns ESRCH within a short window.
-	// We can't easily parse the PID without strconv import bloat in tests,
-	// so we rely on `pgrep` semantics: re-kill the group should be a no-op.
+	// Do not signal the group again here: on macOS an exiting group can
+	// contain only zombies and temporarily return EPERM instead of ESRCH.
+	if err := stdout.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadAll(reader); err != nil {
+		t.Fatalf("grandchild %d still holds stdout after group kill: %v", pid, err)
+	}
+}
+
+func TestForceKillCmd_AlreadyReapedProcessGroup(t *testing.T) {
+	cmd := exec.Command("/bin/sh", "-c", "exit 0")
+	prepareCmdForKill(cmd)
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
 	if err := forceKillCmd(cmd); err != nil {
-		t.Errorf("second forceKillCmd should be no-op, got %v", err)
+		t.Fatalf("kill of already reaped process group should be a no-op: %v", err)
 	}
 }
 
