@@ -1,4 +1,4 @@
-//go:build !no_iflow
+//go:build full_plugins && !no_iflow
 
 package main
 

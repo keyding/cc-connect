@@ -1,4 +1,4 @@
-//go:build !no_tuitui
+//go:build full_plugins && !no_tuitui
 
 package main
 

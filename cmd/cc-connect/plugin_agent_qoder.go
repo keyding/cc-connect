@@ -1,4 +1,4 @@
-//go:build !no_qoder
+//go:build full_plugins && !no_qoder
 
 package main
 

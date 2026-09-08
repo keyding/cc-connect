@@ -1,4 +1,4 @@
-//go:build !no_copilot
+//go:build full_plugins && !no_copilot
 
 package main
 

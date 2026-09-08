@@ -1,4 +1,4 @@
-//go:build !no_cursor
+//go:build full_plugins && !no_cursor
 
 package main
 

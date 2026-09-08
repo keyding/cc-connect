@@ -1,4 +1,4 @@
-//go:build !no_slack
+//go:build full_plugins && !no_slack
 
 package main
 

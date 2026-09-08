@@ -1,3 +1,5 @@
+> This checkout defaults to **Telegram + Claude Code + Codex**. Other adapters are opt-in; see [the local build guide](docs/local-build.md).
+
 <p align="center">
   <img src="./docs/images/banner.svg" alt="CC-Connect Banner" width="800"/>
 </p>

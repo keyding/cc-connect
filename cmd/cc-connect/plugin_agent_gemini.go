@@ -1,4 +1,4 @@
-//go:build !no_gemini
+//go:build full_plugins && !no_gemini
 
 package main
 

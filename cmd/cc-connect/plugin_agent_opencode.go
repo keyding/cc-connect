@@ -1,4 +1,4 @@
-//go:build !no_opencode
+//go:build full_plugins && !no_opencode
 
 package main
 

@@ -1,4 +1,4 @@
-//go:build !no_weixin
+//go:build full_plugins && !no_weixin
 
 package main
 

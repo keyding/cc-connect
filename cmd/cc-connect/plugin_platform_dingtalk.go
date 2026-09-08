@@ -1,4 +1,4 @@
-//go:build !no_dingtalk
+//go:build full_plugins && !no_dingtalk
 
 package main
 

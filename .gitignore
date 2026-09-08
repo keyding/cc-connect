@@ -40,6 +40,7 @@ vendor/
 config.toml
 config.*.toml
 !config.example.toml
+!docs/config.full.example.toml
 .env
 *.local.toml
 

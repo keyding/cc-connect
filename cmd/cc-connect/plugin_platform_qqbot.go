@@ -1,4 +1,4 @@
-//go:build !no_qqbot
+//go:build full_plugins && !no_qqbot
 
 package main
 

@@ -230,6 +230,11 @@ func newCUJEnv(t *testing.T) *cujEnv {
 	agent := &cujAgent{}
 	storePath := dir + "/sessions.json"
 	e := NewEngine("test", agent, []Platform{plat}, storePath, LangEnglish)
+	t.Cleanup(func() {
+		if err := e.Stop(); err != nil {
+			t.Errorf("stop engine: %v", err)
+		}
+	})
 	return &cujEnv{
 		t:       t,
 		engine:  e,
@@ -639,6 +644,11 @@ func TestCUJ_G1_LLMFailureSurfacesErrorToUser(t *testing.T) {
 	agent.failNext.Set(true)
 	dir := t.TempDir()
 	e := NewEngine("test", agent, []Platform{plat}, dir+"/sessions.json", LangEnglish)
+	t.Cleanup(func() {
+		if err := e.Stop(); err != nil {
+			t.Errorf("stop engine: %v", err)
+		}
+	})
 
 	msg := &Message{
 		SessionKey: "test:fred",
@@ -1024,6 +1034,11 @@ func TestCUJ_G3_PlatformReconnectReinitializesAndDelivers(t *testing.T) {
 	}
 	agent := &cujAgent{}
 	e := NewEngine("test", agent, []Platform{plat}, dir+"/sessions.json", LangEnglish)
+	t.Cleanup(func() {
+		if err := e.Stop(); err != nil {
+			t.Errorf("stop engine: %v", err)
+		}
+	})
 
 	// 1. Initial connect.
 	e.OnPlatformReady(plat)
@@ -1127,6 +1142,11 @@ func TestCUJ_A3_ImageReachesAgent(t *testing.T) {
 	agent := &cujAgent{}
 	dir := t.TempDir()
 	e := NewEngine("test", agent, []Platform{plat}, dir+"/sessions.json", LangEnglish)
+	t.Cleanup(func() {
+		if err := e.Stop(); err != nil {
+			t.Errorf("stop engine: %v", err)
+		}
+	})
 
 	msg := &Message{
 		SessionKey: "test:img", Platform: "test", MessageID: "img1",
@@ -1162,6 +1182,11 @@ func TestCUJ_A4_VoiceMessageWithoutSTTSurfacesClearMessage(t *testing.T) {
 	agent := &cujAgent{}
 	dir := t.TempDir()
 	e := NewEngine("test", agent, []Platform{plat}, dir+"/sessions.json", LangEnglish)
+	t.Cleanup(func() {
+		if err := e.Stop(); err != nil {
+			t.Errorf("stop engine: %v", err)
+		}
+	})
 
 	msg := &Message{
 		SessionKey: "test:voice", Platform: "test", MessageID: "v1",
@@ -1191,6 +1216,11 @@ func TestCUJ_A5_FileReachesAgent(t *testing.T) {
 	agent := &cujAgent{}
 	dir := t.TempDir()
 	e := NewEngine("test", agent, []Platform{plat}, dir+"/sessions.json", LangEnglish)
+	t.Cleanup(func() {
+		if err := e.Stop(); err != nil {
+			t.Errorf("stop engine: %v", err)
+		}
+	})
 
 	msg := &Message{
 		SessionKey: "test:file", Platform: "test", MessageID: "f1",
@@ -1607,6 +1637,11 @@ func TestCUJ_E4_TimerFiresAndDeliversToAgentAndUser(t *testing.T) {
 	plat := &cujReplyCtxPlatform{stubPlatformEngine: &stubPlatformEngine{n: "test"}}
 	agent := &cujAgent{}
 	e := NewEngine("test", agent, []Platform{plat}, dir+"/sessions.json", LangEnglish)
+	t.Cleanup(func() {
+		if err := e.Stop(); err != nil {
+			t.Errorf("stop engine: %v", err)
+		}
+	})
 
 	timerDir := dir + "/timer"
 	if err := os.MkdirAll(timerDir, 0o755); err != nil {

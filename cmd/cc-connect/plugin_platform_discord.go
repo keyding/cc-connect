@@ -1,4 +1,4 @@
-//go:build !no_discord
+//go:build full_plugins && !no_discord
 
 package main
 

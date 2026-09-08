@@ -1,4 +1,4 @@
-//go:build !no_kimi
+//go:build full_plugins && !no_kimi
 
 package main
 

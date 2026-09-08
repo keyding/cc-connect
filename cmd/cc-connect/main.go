@@ -1559,37 +1559,7 @@ func bootstrapConfig(path string) error {
 		return err
 	}
 
-	const tmpl = `# cc-connect configuration
-# Docs: https://github.com/chenhg5/cc-connect
-
-[log]
-level = "info"
-
-[[projects]]
-name = "my-project"
-
-[projects.agent]
-type = "claudecode"   # "claudecode", "codex", "cursor", "gemini", "qoder", "opencode", or "iflow"
-
-[projects.agent.options]
-work_dir = "/path/to/your/project"
-mode = "default"
-# model = "claude-sonnet-4-20250514"
-
-# --- Choose at least one platform below ---
-
-# Feishu / Lark (WebSocket, no public IP needed)
-[[projects.platforms]]
-type = "feishu"
-
-[projects.platforms.options]
-app_id = "your-feishu-app-id"
-app_secret = "your-feishu-app-secret"
-
-# For more platforms (DingTalk, Telegram, Slack, Discord, LINE, WeChat Work)
-# see: https://github.com/chenhg5/cc-connect/blob/main/config.example.toml
-`
-	return os.WriteFile(path, []byte(tmpl), 0o644)
+	return os.WriteFile(path, []byte(ccconnect.ConfigExampleTOML), 0o644)
 }
 
 func printUsage() {

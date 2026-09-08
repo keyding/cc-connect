@@ -1,4 +1,4 @@
-//go:build !no_qq
+//go:build full_plugins && !no_qq
 
 package main
 

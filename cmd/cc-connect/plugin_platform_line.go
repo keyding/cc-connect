@@ -1,4 +1,4 @@
-//go:build !no_line
+//go:build full_plugins && !no_line
 
 package main
 

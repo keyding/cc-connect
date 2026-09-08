@@ -1,4 +1,4 @@
-//go:build !no_max
+//go:build full_plugins && !no_max
 
 package main
 

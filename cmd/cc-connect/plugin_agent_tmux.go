@@ -1,4 +1,4 @@
-//go:build !no_tmux
+//go:build full_plugins && !no_tmux
 
 package main
 
