@@ -2883,3 +2883,70 @@ func TestCUJ_B18_ReplyOldAnswerPreservesDefaultAndRestart(t *testing.T) {
 		})
 	}
 }
+
+func TestCUJ_B19_MediaProgressEditsAndCrossTopicReplies(t *testing.T) {
+	a := &mediaLinkAgent{queueTestAgent: queueTestAgent{dir: t.TempDir(), calls: make(chan *queueTestSession, 20)}, outputKeys: make(chan string, 20)}
+	p := &mediaLinkPlatform{linkTestPlatform: linkTestPlatform{queueTestPlatform: queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}}}
+	e := NewEngine("project", a, []Platform{p}, filepath.Join(t.TempDir(), "sessions"), LangEnglish)
+	e.attachmentSendEnabled = true
+	e.streamPreview = StreamPreviewCfg{Enabled: true, IntervalMs: 1, MinDeltaChars: 1, MaxChars: 2000}
+	t.Cleanup(func() { _ = e.Stop() })
+	send := func(topic, id, text string, ref *MessageReference) {
+		e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: topic, UserID: topic, MessageID: id, Content: text, ReplyCtx: topic, BotReply: ref})
+	}
+	send("topic-one", "1", "/new Alpha", nil)
+	send("topic-one", "2", "produce outputs", nil)
+	s := nextQueueSession(t, &a.queueTestAgent)
+	<-s.sent
+	key := <-a.outputKeys
+	s.events <- Event{Type: EventText, Content: "first preview"}
+	waitQueue(t, func() bool { return p.receiptCount() == 1 })
+	s.events <- Event{Type: EventText, Content: " update"}
+	waitQueue(t, func() bool { return p.updateCount() > 0 })
+	s.events <- Event{Type: EventToolUse, ToolName: "build"}
+	waitQueue(t, func() bool { return p.receiptCount() == 2 })
+	if err := e.SendToSessionWithAttachments(key, "", []ImageAttachment{{FileName: "chart.png", Data: []byte("image")}}, []FileAttachment{{FileName: "report.txt", Data: []byte("file")}}, nil, false); err != nil {
+		t.Fatal(err)
+	}
+	waitQueue(t, func() bool { return p.receiptCount() == 4 })
+	s.events <- Event{Type: EventResult, Done: true, Content: "final output"}
+	waitQueue(t, func() bool { return p.receiptCount() == 5 })
+	if err := e.SendToSessionWithAttachments(key, "stale output", nil, nil, nil, false); err == nil {
+		t.Fatal("ended request accepted side output")
+	}
+	send("topic-two", "3", "/new Beta", nil)
+	// Preview (edited in place), progress, image and file all resume Alpha in
+	// the new Topic, while that Topic's default remains Beta.
+	for i := 1; i <= 4; i++ {
+		send("topic-two", fmt.Sprint(10+i), "follow this output", &MessageReference{Scope: "group", MessageID: fmt.Sprintf("bot-%d", i)})
+		s = nextQueueSession(t, &a.queueTestAgent)
+		<-s.sent
+		<-a.outputKeys
+		if s.resume != "history-one" {
+			t.Fatalf("lost shared context: %q", s.resume)
+		}
+		s.events <- Event{Type: EventResult, Done: true, Content: fmt.Sprintf("followup-%d", i)}
+		waitQueue(t, func() bool { return p.receiptCount() == 5+i })
+	}
+	send("topic-two", "20", "ordinary in Beta", nil)
+	s = nextQueueSession(t, &a.queueTestAgent)
+	<-s.sent
+	<-a.outputKeys
+	if s.resume != "" {
+		t.Fatal("reply changed Topic default")
+	}
+	s.events <- Event{Type: EventResult, Done: true, Content: "beta result"}
+	waitQueue(t, func() bool { return p.receiptCount() == 10 })
+	p.muTargets.Lock()
+	targets := strings.Join(p.targets, "\n")
+	p.muTargets.Unlock()
+	if !strings.Contains(targets, "topic-one:image:chart.png") || !strings.Contains(targets, "topic-one:file:report.txt") || !strings.Contains(targets, "topic-two:followup-4") {
+		t.Fatal(targets)
+	}
+	send("topic-two", "21", "unknown external", &MessageReference{})
+	send("topic-two", "22", "upgraded group cannot guess", &MessageReference{Scope: "old-group", MessageID: "bot-1"})
+	noQueueSession(t, &a.queueTestAgent)
+	if got := strings.Join(p.getSent(), "\n"); strings.Count(got, e.i18n.T(MsgSharedReplyUnavailable)) != 2 {
+		t.Fatal(got)
+	}
+}

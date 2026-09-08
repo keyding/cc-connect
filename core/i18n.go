@@ -699,6 +699,7 @@ const (
 )
 
 const (
+	MsgSharedProgress         MsgKey = "shared_progress"
 	MsgSharedReplyUnavailable MsgKey = "shared_reply_unavailable"
 	MsgSharedNotAccepted      MsgKey = "MsgSharedNotAccepted"
 	MsgSharedQueued           MsgKey = "MsgSharedQueued"
@@ -717,6 +718,13 @@ const (
 )
 
 var messages = map[MsgKey]map[Language]string{
+	MsgSharedProgress: {
+		LangEnglish:            "Working: %s",
+		LangChinese:            "正在执行：%s",
+		LangTraditionalChinese: "正在執行：%s",
+		LangJapanese:           "実行中：%s",
+		LangSpanish:            "En curso: %s",
+	},
 	MsgSharedReplyUnavailable: {
 		LangEnglish:            "This reply cannot be linked to an accessible session. Select a session and send again.",
 		LangChinese:            "无法确认此回复所属的可访问会话。请选择会话后重新发送。",

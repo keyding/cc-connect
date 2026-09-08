@@ -36,10 +36,7 @@ func (p *Platform) ReplyWithReceipt(ctx context.Context, target any, text string
 		if sendErr != nil {
 			return fmt.Errorf("telegram: reply chunk %d: %w", i, sendErr)
 		}
-		if sent == nil || sent.ID <= 0 || sent.Chat.ID != rc.chatID {
-			return fmt.Errorf("telegram: invalid message receipt")
-		}
-		if err := record(core.MessageReference{Scope: strconv.FormatInt(sent.Chat.ID, 10), MessageID: strconv.Itoa(sent.ID)}); err != nil {
+		if err := recordTelegramMessage(rc, sent, record); err != nil {
 			return err
 		}
 	}
@@ -52,6 +49,24 @@ func (p *Platform) replyReference(msg *models.Message) *core.MessageReference {
 	p.mu.RUnlock()
 	if self == nil || msg.ForwardOrigin != nil {
 		return nil
+	}
+	if external := msg.ExternalReply; external != nil {
+		origin := external.Origin.MessageOriginUser
+		// Hidden/anonymous origins cannot prove this bot authored the message.
+		if origin != nil && origin.SenderUser.ID != self.ID {
+			return nil
+		}
+		ref := &core.MessageReference{}
+		if origin == nil {
+			return ref
+		}
+		if external.Chat != nil {
+			ref.Scope = strconv.FormatInt(external.Chat.ID, 10)
+		}
+		if external.MessageID > 0 {
+			ref.MessageID = strconv.Itoa(external.MessageID)
+		}
+		return ref
 	}
 	reply := msg.ReplyToMessage
 	if reply == nil || reply.From == nil || reply.From.ID != self.ID || reply.ForwardOrigin != nil {

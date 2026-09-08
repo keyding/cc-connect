@@ -11413,6 +11413,9 @@ type sendTarget struct {
 }
 
 func (e *Engine) SendToSessionInWorkDir(sessionKey, message string, images []ImageAttachment, files []FileAttachment, workDir string, atUsers []string, atAll bool) error {
+	if strings.HasPrefix(sessionKey, "shared-request:") {
+		return fmt.Errorf("shared output cannot change its request workspace")
+	}
 	if message == "" && len(images) == 0 && len(files) == 0 {
 		return fmt.Errorf("message or attachment is required")
 	}
@@ -11784,6 +11787,10 @@ func videoFormatHint(v FileAttachment) string {
 }
 
 func (e *Engine) resolveOutboundSessionTarget(sessionKey string, hasAttachments bool) (*interactiveState, Platform, any, error) {
+	if strings.HasPrefix(sessionKey, "shared-request:") {
+		p, target, err := e.resolveSharedOutput(sessionKey)
+		return nil, p, target, err
+	}
 	e.interactiveMu.Lock()
 
 	var state *interactiveState
