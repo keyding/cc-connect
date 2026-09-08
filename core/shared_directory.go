@@ -67,7 +67,7 @@ func (d *sharedDirectory) save(state sharedDirectoryState) error {
 	if err != nil {
 		return err
 	}
-	if err = os.MkdirAll(filepath.Dir(d.path), 0700); err != nil {
+	if err = ensureSharedDirectory(filepath.Dir(d.path)); err != nil {
 		return err
 	}
 	f, err := os.CreateTemp(filepath.Dir(d.path), ".shared-*")
@@ -85,7 +85,10 @@ func (d *sharedDirectory) save(state sharedDirectoryState) error {
 	if closeErr != nil {
 		return closeErr
 	}
-	return os.Rename(f.Name(), d.path)
+	if err := os.Rename(f.Name(), d.path); err != nil {
+		return err
+	}
+	return syncSharedDirectory(filepath.Dir(d.path))
 }
 
 // English case folding only: other Unicode letters remain distinct per spec.

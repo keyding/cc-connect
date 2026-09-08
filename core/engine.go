@@ -2425,6 +2425,9 @@ func (e *Engine) Stop() error {
 	// Cancellation and adapter teardown unblock active turns. Wait for their
 	// final history writes before callers release the session store.
 	e.messageWork.Wait()
+	if err := e.sharedQueue.close(); err != nil {
+		errs = append(errs, err)
+	}
 	if len(errs) > 0 {
 		return fmt.Errorf("engine stop errors: %v", errs)
 	}
@@ -2896,6 +2899,10 @@ func (e *Engine) handleMessage(p Platform, msg *Message) {
 
 	// Shared requests use stable identity and durable admission.
 	if msg.SharedScope != "" {
+		if msg.AttachmentError != nil {
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgSharedNotAccepted))
+			return
+		}
 		if !e.checkRateLimit(msg) {
 			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgRateLimited))
 			return

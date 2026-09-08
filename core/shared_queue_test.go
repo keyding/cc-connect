@@ -373,17 +373,32 @@ func TestSharedQueue_ProcessCrashDoesNotReplay(t *testing.T) {
 	if path := os.Getenv("CC_QUEUE_CRASH_FIXTURE"); path != "" {
 		e, p, a := newQueueEngine(t, filepath.Dir(path), path)
 		queueMessage(e, p, "a", "1", "/new Alpha")
-		queueMessage(e, p, "a", "2", "started")
-		s := nextQueueSession(t, a)
-		<-s.sent
-		queueMessage(e, p, "a", "3", "queued")
+		if os.Getenv("CC_QUEUE_CRASH_START_FAILURE") == "true" {
+			var restore func()
+			e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: "a", UserID: "a", MessageID: "2", Content: "not started", ReplyCtx: "a", OnAccepted: func() { restore = breakQueueStorage(t, filepath.Dir(path)) }})
+			waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "Queue paused") })
+			restore()
+			noQueueSession(t, a)
+		} else {
+			queueMessage(e, p, "a", "2", "started")
+			s := nextQueueSession(t, a)
+			<-s.sent
+			queueMessage(e, p, "a", "3", "queued")
+		}
 		fmt.Println("QUEUE_CRASH_READY")
 		select {}
 	}
+	for _, startFailure := range []bool{false, true} {
+		t.Run(fmt.Sprint(startFailure), func(t *testing.T) { crashSharedQueue(t, startFailure) })
+	}
+}
+
+func crashSharedQueue(t *testing.T, startFailure bool) {
+	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state")
 	cmd := exec.Command(os.Args[0], "-test.run=^TestSharedQueue_ProcessCrashDoesNotReplay$")
-	cmd.Env = append(os.Environ(), "CC_QUEUE_CRASH_FIXTURE="+path)
+	cmd.Env = append(os.Environ(), "CC_QUEUE_CRASH_FIXTURE="+path, "CC_QUEUE_CRASH_START_FAILURE="+fmt.Sprint(startFailure))
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -489,4 +504,12 @@ func TestSharedQueue_DeliveryFailureDoesNotExecuteAgain(t *testing.T) {
 	}
 	queueMessage(restored, rp, "a", "2", "first edited")
 	noQueueSession(t, ra)
+}
+
+// The external agent fixture makes loss of resumed context visible in its reply.
+func (s *queueTestSession) answerInResumedConversation(answer string) {
+	if s.resume == "" {
+		answer = "fresh conversation without prior context"
+	}
+	s.events <- Event{Type: EventResult, Content: answer, Done: true}
 }

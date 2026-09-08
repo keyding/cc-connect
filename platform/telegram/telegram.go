@@ -465,6 +465,7 @@ func (p *Platform) handleMessage(ctx context.Context, msg *models.Message) {
 		imgData, err := p.downloadFile(best.FileID)
 		if err != nil {
 			slog.Error("telegram: download photo failed", "error", err)
+			p.rejectSharedAttachment(msg, rctx, err)
 			return
 		}
 		caption := stripBotMention(msg.Caption, botName)
@@ -485,6 +486,7 @@ func (p *Platform) handleMessage(ctx context.Context, msg *models.Message) {
 		audioData, err := p.downloadFile(msg.Voice.FileID)
 		if err != nil {
 			slog.Error("telegram: download voice failed", "error", err)
+			p.rejectSharedAttachment(msg, rctx, err)
 			return
 		}
 		p.dispatchMessage(&core.Message{
@@ -508,6 +510,7 @@ func (p *Platform) handleMessage(ctx context.Context, msg *models.Message) {
 		audioData, err := p.downloadFile(msg.Audio.FileID)
 		if err != nil {
 			slog.Error("telegram: download audio failed", "error", err)
+			p.rejectSharedAttachment(msg, rctx, err)
 			return
 		}
 		format := "mp3"
@@ -538,6 +541,7 @@ func (p *Platform) handleMessage(ctx context.Context, msg *models.Message) {
 		fileData, err := p.downloadFile(msg.Document.FileID)
 		if err != nil {
 			slog.Error("telegram: download document failed", "error", err)
+			p.rejectSharedAttachment(msg, rctx, err)
 			return
 		}
 		caption := stripBotMention(msg.Caption, botName)
@@ -1867,4 +1871,11 @@ func (p *Platform) UnmarshalReplyContext(data json.RawMessage) (any, error) {
 		return nil, fmt.Errorf("telegram: invalid durable reply destination")
 	}
 	return replyContext{chatID: ids[0], threadID: int(ids[1]), messageID: int(ids[2])}, nil
+}
+
+func (p *Platform) rejectSharedAttachment(msg *models.Message, target replyContext, err error) {
+	if p.sharedScope(msg.Chat) == "" {
+		return
+	}
+	p.dispatchMessage(&core.Message{Platform: "telegram", MessageID: strconv.Itoa(msg.ID), UserID: strconv.FormatInt(msg.From.ID, 10), ReplyCtx: target, AttachmentError: err}, msg)
 }

@@ -2,10 +2,12 @@ package telegram
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1105,5 +1107,77 @@ func TestDurableReplyContext_PreservesChatTopicAndMessage(t *testing.T) {
 		if _, err := p.UnmarshalReplyContext([]byte(bad)); err == nil {
 			t.Fatalf("accepted %s", bad)
 		}
+	}
+}
+
+type attachmentFailureAgent struct{ starts atomic.Int32 }
+
+func (a *attachmentFailureAgent) Name() string { return "test" }
+func (a *attachmentFailureAgent) StartSession(context.Context, string) (core.AgentSession, error) {
+	a.starts.Add(1)
+	return nil, fmt.Errorf("must not execute rejected attachment")
+}
+func (a *attachmentFailureAgent) ListSessions(context.Context) ([]core.AgentSessionInfo, error) {
+	return nil, nil
+}
+func (a *attachmentFailureAgent) Stop() error { return nil }
+
+func TestSharedAttachmentDownloadFailure_ExplicitlyRejectsWithoutExecution(t *testing.T) {
+	for _, kind := range []string{"photo", "document", "voice", "audio"} {
+		t.Run(kind, func(t *testing.T) {
+			replies := make(chan string, 1)
+			p := newTelegramTestPlatform(t, func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/getFile") {
+					w.WriteHeader(http.StatusInternalServerError)
+					fmt.Fprint(w, `{"ok":false,"error_code":500,"description":"download unavailable"}`)
+					return
+				}
+				if strings.HasSuffix(r.URL.Path, "/sendMessage") {
+					var body struct {
+						Text string `json:"text"`
+					}
+					if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+						_ = json.NewDecoder(r.Body).Decode(&body)
+					} else {
+						_ = r.ParseMultipartForm(1 << 20)
+						body.Text = r.FormValue("text")
+					}
+					replies <- body.Text
+					fmt.Fprint(w, `{"ok":true,"result":{"message_id":10,"chat":{"id":-100,"type":"supergroup"}}}`)
+					return
+				}
+				t.Errorf("unexpected HTTP request %s", r.URL.Path)
+			})
+			p.sharedSessionDirectory = true
+			p.groupReplyAll = true
+			p.allowFrom = "*"
+			a := &attachmentFailureAgent{}
+			e := core.NewEngine("project", a, []core.Platform{p}, filepath.Join(t.TempDir(), "s"), core.LangEnglish)
+			t.Cleanup(func() { _ = e.Stop() })
+			p.handler = e.ReceiveMessage
+			msg := &models.Message{ID: 7, Date: int(time.Now().Unix()), From: &models.User{ID: 8}, Chat: models.Chat{ID: -100, Type: models.ChatTypeSupergroup}}
+			switch kind {
+			case "photo":
+				msg.Photo = []models.PhotoSize{{FileID: "file"}}
+			case "document":
+				msg.Document = &models.Document{FileID: "file"}
+			case "voice":
+				msg.Voice = &models.Voice{FileID: "file"}
+			case "audio":
+				msg.Audio = &models.Audio{FileID: "file"}
+			}
+			p.processUpdate(context.Background(), &models.Update{Message: msg})
+			select {
+			case text := <-replies:
+				if !strings.Contains(text, "Task not accepted") {
+					t.Fatal(text)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("missing rejection")
+			}
+			if a.starts.Load() != 0 {
+				t.Fatal("rejected attachment executed")
+			}
+		})
 	}
 }

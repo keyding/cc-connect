@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -164,25 +165,8 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, err er
 	if err != nil {
 		return "", "", err
 	}
-	defer func() {
-		history = as.CurrentSessionID()
-		if closeErr := as.Close(); closeErr != nil {
-			err = closeErr
-		}
-		// Alive alone can turn false before OS process teardown completes.
-		if waiter, ok := as.(AgentSessionSettler); ok {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if waitErr := waiter.WaitForExit(ctx); waitErr != nil {
-				err = waitErr
-			}
-		} else {
-			err = fmt.Errorf("agent does not confirm executor exit")
-		}
-		if history == "" && err == nil {
-			err = fmt.Errorf("agent did not supply history identity")
-		}
-	}()
+	defer func() { history = as.CurrentSessionID(); err = errors.Join(err, settleSharedAgent(as)) }()
+
 	sendDone := make(chan error, 1)
 	go func() {
 		sendDone <- as.Send(e.buildSenderPrompt(r.Content, r.UserID, r.UserName, r.Platform, r.Entry, ""), r.ID, r.Images, r.Files)
@@ -249,4 +233,25 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, err er
 			}
 		}
 	}
+}
+
+// Settlement must preserve all failure causes and prove OS teardown before unlock.
+func settleSharedAgent(as AgentSession) error {
+	var errs []error
+	if err := as.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("close shared executor: %w", err))
+	}
+	if waiter, ok := as.(AgentSessionSettler); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := waiter.WaitForExit(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("settle shared executor: %w", err))
+		}
+	} else {
+		errs = append(errs, fmt.Errorf("agent does not confirm executor exit"))
+	}
+	if as.CurrentSessionID() == "" {
+		errs = append(errs, fmt.Errorf("agent did not supply history identity"))
+	}
+	return errors.Join(errs...)
 }

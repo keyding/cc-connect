@@ -2798,10 +2798,7 @@ func TestCUJ_B15_SharedQueueSelectionModesAndConcurrentStart(t *testing.T) {
 			for i := 1; i < 8; i++ {
 				s := nextQueueSession(t, a)
 				<-s.sent
-				if s.resume != "history-one" {
-					t.Fatal("queued request changed session")
-				}
-				s.events <- Event{Type: EventResult, Content: fmt.Sprintf("result-%d", i), Done: true}
+				s.answerInResumedConversation(fmt.Sprintf("result-%d", i))
 			}
 			waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "result-7") })
 			if got := strings.Join(p.getSent(), "\n"); strings.Count(got, "Saved for Alpha") != 8 {
