@@ -699,6 +699,11 @@ const (
 )
 
 const (
+	MsgSharedNotAccepted      MsgKey = "MsgSharedNotAccepted"
+	MsgSharedQueued           MsgKey = "MsgSharedQueued"
+	MsgSharedPaused           MsgKey = "MsgSharedPaused"
+	MsgSharedWaiting          MsgKey = "MsgSharedWaiting"
+	MsgSharedDuplicate        MsgKey = "shared_duplicate"
 	MsgSharedChoose           MsgKey = "shared_sharedchoose"
 	MsgSharedList             MsgKey = "shared_sharedlist"
 	MsgSharedCurrent          MsgKey = "shared_sharedcurrent"
@@ -711,6 +716,41 @@ const (
 )
 
 var messages = map[MsgKey]map[Language]string{
+	MsgSharedNotAccepted: {
+		LangEnglish:            "Task not accepted: request, attachments or reply destination could not be saved.",
+		LangChinese:            "任务未接收：请求、附件或回复位置未能保存。",
+		LangTraditionalChinese: "任務未接收：請求、附件或回覆位置未能儲存。",
+		LangJapanese:           "タスクは未受付です。リクエスト、添付または返信先を保存できませんでした。",
+		LangSpanish:            "Tarea no aceptada: no se pudieron guardar la solicitud, los adjuntos o el destino.",
+	},
+	MsgSharedQueued: {
+		LangEnglish:            "Saved for %s; %d request(s) ahead.",
+		LangChinese:            "已保存至会话 %s；前方有 %d 个请求。",
+		LangTraditionalChinese: "已儲存至會話 %s；前方有 %d 個請求。",
+		LangJapanese:           "会話 %s に保存しました。先行リクエストは %d 件です。",
+		LangSpanish:            "Guardada para %s; hay %d solicitudes delante.",
+	},
+	MsgSharedPaused: {
+		LangEnglish:            "Queue paused: execution failed, was interrupted or could not be confirmed. Saved requests are retained; manual recovery is not available yet.",
+		LangChinese:            "队列已暂停：执行失败、中断或结果无法确认。已保存请求保留；人工恢复入口尚未提供。",
+		LangTraditionalChinese: "佇列已暫停：執行失敗、中斷或結果無法確認。已儲存請求保留；人工恢復入口尚未提供。",
+		LangJapanese:           "実行失敗、中断または結果不明のためキューを停止しました。保存済みリクエストは保持されます。手動復旧はまだ未対応です。",
+		LangSpanish:            "Cola pausada: ejecución fallida, interrumpida o incierta. Se conservan las solicitudes; la recuperación manual aún no está disponible.",
+	},
+	MsgSharedWaiting: {
+		LangEnglish:            "Agent is waiting for interaction. The queue and working directory remain locked; shared interaction controls are not available yet.",
+		LangChinese:            "Agent 正等待交互，会话队列及工作目录仍保持互斥；共享交互入口尚未提供。",
+		LangTraditionalChinese: "Agent 正等待互動，會話佇列及工作目錄仍保持互斥；共享互動入口尚未提供。",
+		LangJapanese:           "エージェントは操作待ちです。キューと作業ディレクトリのロックを保持します。共有操作はまだ未対応です。",
+		LangSpanish:            "El agente espera interacción. La cola y el directorio siguen bloqueados; los controles compartidos aún no están disponibles.",
+	},
+	MsgSharedDuplicate: {
+		LangEnglish:            "This message is already saved; it will not be executed again.",
+		LangChinese:            "该消息已保存，不会重复执行。",
+		LangTraditionalChinese: "該訊息已儲存，不會重複執行。",
+		LangJapanese:           "このメッセージは保存済みです。重複実行しません。",
+		LangSpanish:            "Este mensaje ya está guardado; no se ejecutará de nuevo.",
+	},
 	MsgSharedChoose: {
 		LangEnglish:            "No session selected. Use /new [name] or /list and /switch <number, name or ID>, then resend your task.",
 		LangChinese:            "未选择会话。请用 /new [名称] 创建，或 /list 后 /switch <序号、名称或 ID> 选择，再重新发送任务。",
@@ -719,11 +759,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "No hay sesión seleccionada. Usa /new [nombre] o /list y /switch <número, nombre o ID>, y vuelve a enviar la tarea.",
 	},
 	MsgSharedList: {
-		LangEnglish:            "Shared sessions (pending; * = current):",
-		LangChinese:            "共享会话（待开始；* 为当前选择）：",
-		LangTraditionalChinese: "共享會話（待開始；* 為目前選擇）：",
-		LangJapanese:           "共有会話（開始待ち；* は現在の選択）：",
-		LangSpanish:            "Sesiones compartidas (pendientes; * = actual):",
+		LangEnglish:            "Shared sessions (* = current):",
+		LangChinese:            "共享会话（* 为当前选择）：",
+		LangTraditionalChinese: "共享會話（* 為目前選擇）：",
+		LangJapanese:           "共有会話（* は現在の選択）：",
+		LangSpanish:            "Sesiones compartidas (* = actual):",
 	},
 	MsgSharedCurrent: {
 		LangEnglish:            "Current: %s [%s] (%s)",
@@ -768,11 +808,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "La ejecución compartida no está disponible en esta vista previa. La tarea no se aceptó ni guardó.",
 	},
 	MsgSharedCommands: {
-		LangEnglish:            "Directory preview supports /new, /list, /switch, /name and /current.",
-		LangChinese:            "目录试用支持 /new、/list、/switch、/name 和 /current。",
-		LangTraditionalChinese: "目錄試用支援 /new、/list、/switch、/name 和 /current。",
-		LangJapanese:           "ディレクトリの試用版は /new、/list、/switch、/name、/current に対応しています。",
-		LangSpanish:            "La vista previa admite /new, /list, /switch, /name y /current.",
+		LangEnglish:            "Shared mode supports /new, /list, /switch, /name and /current.",
+		LangChinese:            "共享模式支持 /new、/list、/switch、/name 和 /current。",
+		LangTraditionalChinese: "共享模式支援 /new、/list、/switch、/name 和 /current。",
+		LangJapanese:           "共有モードは /new、/list、/switch、/name、/current に対応しています。",
+		LangSpanish:            "El modo compartido admite /new, /list, /switch, /name y /current.",
 	},
 
 	MsgStarting: {

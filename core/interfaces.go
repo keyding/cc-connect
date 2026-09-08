@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -693,3 +694,14 @@ type PendingSessionRouteMatcher interface {
 type SessionIDValidationChecker interface {
 	CheckSessionID(ctx context.Context, sessionID string) (bool, error)
 }
+
+// DurableReplyContext preserves an exact reply destination across process restarts.
+// Implementations must validate decoded data and never fall back to another chat.
+type DurableReplyContext interface {
+	MarshalReplyContext(any) (json.RawMessage, error)
+	UnmarshalReplyContext(json.RawMessage) (any, error)
+}
+
+// AgentSessionSettler confirms executor teardown, not merely a stop request.
+// Used before releasing a shared working directory for another request.
+type AgentSessionSettler interface{ WaitForExit(context.Context) error }

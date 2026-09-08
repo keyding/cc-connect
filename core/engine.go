@@ -356,6 +356,7 @@ type RateLimitCfg struct {
 // Engine routes messages between platforms and the agent for a single project.
 type Engine struct {
 	sharedDirectory *sharedDirectory
+	sharedQueue     *sharedQueue
 
 	name                  string
 	agent                 Agent
@@ -755,6 +756,7 @@ func NewEngine(name string, ag Agent, platforms []Platform, sessionStorePath str
 	e := &Engine{
 		name:                  name,
 		sharedDirectory:       newSharedDirectory(sessionStorePath),
+		sharedQueue:           newSharedQueue(sessionStorePath),
 		agent:                 ag,
 		platforms:             platforms,
 		sessions:              NewSessionManager(sessionStorePath),
@@ -2368,6 +2370,7 @@ func (e *Engine) Start() error {
 		return startErrs[0] // Return first error
 	}
 
+	e.startSharedQueue()
 	e.startObserver()
 	return nil
 }
@@ -2891,7 +2894,7 @@ func (e *Engine) handleMessage(p Platform, msg *Message) {
 		Content:    msg.Content,
 	})
 
-	// Shared drafts have no executor yet, including for audio and attachments.
+	// Shared requests use stable identity and durable admission.
 	if msg.SharedScope != "" {
 		if !e.checkRateLimit(msg) {
 			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgRateLimited))

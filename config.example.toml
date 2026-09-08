@@ -23,7 +23,7 @@ mode = "default"
 type = "telegram"
 
 [projects.platforms.options]
-# shared_session_directory = false # Opt-in directory preview; shared execution is not yet available
+# shared_session_directory = false # Opt-in shared directory and durable queue; shared controls/recovery are not yet available
 # share_session_in_channel = false # false: each user per Topic; true: common selection per Topic
 # reply_to_trigger = false # Reply to the triggering message / 引用触发消息
 token = "${TELEGRAM_BOT_TOKEN}"

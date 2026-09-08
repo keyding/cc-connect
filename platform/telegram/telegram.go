@@ -3,6 +3,7 @@ package telegram
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -1847,4 +1848,23 @@ func (p *Platform) PendingSessionRouteMatches(a, b string) bool {
 		return false
 	}
 	return x[0] == "telegram" && y[0] == "telegram" && x[1] == y[1] && x[len(x)-1] == y[len(y)-1]
+}
+
+// MarshalReplyContext retains chat, topic and original message independently of selections.
+func (p *Platform) MarshalReplyContext(v any) (json.RawMessage, error) {
+	rc, ok := v.(replyContext)
+	if !ok || rc.chatID == 0 {
+		return nil, fmt.Errorf("telegram: invalid durable reply context")
+	}
+	return json.Marshal([3]int64{rc.chatID, int64(rc.threadID), int64(rc.messageID)})
+}
+func (p *Platform) UnmarshalReplyContext(data json.RawMessage) (any, error) {
+	var ids []int64
+	if err := json.Unmarshal(data, &ids); err != nil {
+		return nil, fmt.Errorf("telegram: decode reply context: %w", err)
+	}
+	if len(ids) != 3 || ids[0] == 0 || ids[1] < 0 || ids[2] < 0 {
+		return nil, fmt.Errorf("telegram: invalid durable reply destination")
+	}
+	return replyContext{chatID: ids[0], threadID: int(ids[1]), messageID: int(ids[2])}, nil
 }

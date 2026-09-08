@@ -1073,3 +1073,37 @@ func TestSharedDirectoryMessageScope(t *testing.T) {
 		})
 	}
 }
+
+type durableReplyBot struct {
+	*stubTelegramBot
+	params *tgbot.SendMessageParams
+}
+
+func (b *durableReplyBot) SendMessage(_ context.Context, params *tgbot.SendMessageParams) (*models.Message, error) {
+	b.params = params
+	return &models.Message{ID: 99}, nil
+}
+
+func TestDurableReplyContext_PreservesChatTopicAndMessage(t *testing.T) {
+	b := &durableReplyBot{stubTelegramBot: newStubTelegramBot()}
+	p := &Platform{bot: b}
+	encoded, err := p.MarshalReplyContext(replyContext{chatID: -100123, threadID: 44, messageID: 71})
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := p.UnmarshalReplyContext(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Reply(context.Background(), restored, "queued answer"); err != nil {
+		t.Fatal(err)
+	}
+	if b.params.ChatID != int64(-100123) || b.params.MessageThreadID != 44 || b.params.ReplyParameters.MessageID != 71 {
+		t.Fatalf("reply moved: %+v", b.params)
+	}
+	for _, bad := range []string{`null`, `[]`, `[0,1,2]`, `[-100123,-1,2]`, `[-100123,1,-2]`, `[-100123,1,2,3]`} {
+		if _, err := p.UnmarshalReplyContext([]byte(bad)); err == nil {
+			t.Fatalf("accepted %s", bad)
+		}
+	}
+}

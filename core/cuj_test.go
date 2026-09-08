@@ -2549,7 +2549,7 @@ func TestCUJ_B14_SharedSelectionModesAndIsolation(t *testing.T) {
 			if common {
 				expected = "Beta"
 			}
-			if got := send("bob", "one", "group", "ordinary task"); !strings.Contains(got, expected) {
+			if got := send("bob", "one", "group", "/current"); !strings.Contains(got, expected) {
 				t.Fatal(got)
 			}
 			if got := send("bob", "two", "group", "/current"); !strings.Contains(got, "Alpha") {
@@ -2754,5 +2754,60 @@ func TestCUJ_B14_FreshDirectoryDoesNotImportAgentHistory(t *testing.T) {
 	}
 	if got, err := os.ReadFile(oldPath); err != nil || string(got) != string(original) {
 		t.Fatalf("old state changed: %q %v", got, err)
+	}
+}
+
+// Three user actions and subsequent queued work use the same real Engine boundary
+// in both personal and common selection modes, including concurrent first use.
+func TestCUJ_B15_SharedQueueSelectionModesAndConcurrentStart(t *testing.T) {
+	for _, common := range []bool{false, true} {
+		t.Run(fmt.Sprint(common), func(t *testing.T) {
+			e, p, a := newQueueEngine(t, t.TempDir(), filepath.Join(t.TempDir(), "s"))
+			entry := func(user string) string {
+				if common {
+					return "topic"
+				}
+				return "topic:" + user
+			}
+			send := func(user, id, content string) {
+				e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: entry(user), UserID: user, MessageID: id, Content: content, ReplyCtx: user})
+			}
+			send("alice", "new", "/new Alpha")
+			if !common {
+				send("bob", "switch", "/switch 1")
+			}
+			var wg sync.WaitGroup
+			for i := 0; i < 8; i++ {
+				wg.Add(1)
+				go func(i int) {
+					defer wg.Done()
+					user := "alice"
+					if i%2 == 1 {
+						user = "bob"
+					}
+					send(user, fmt.Sprint(i), fmt.Sprintf("task-%d", i))
+				}(i)
+			}
+			wg.Wait()
+			first := nextQueueSession(t, a)
+			<-first.sent
+			noQueueSession(t, a)
+			send("bob", "rename", "/name Renamed")
+			send("bob", "new2", "/new Beta")
+			first.events <- Event{Type: EventResult, Content: "first result", Done: true}
+			for i := 1; i < 8; i++ {
+				s := nextQueueSession(t, a)
+				<-s.sent
+				if s.resume != "history-one" {
+					t.Fatal("queued request changed session")
+				}
+				s.events <- Event{Type: EventResult, Content: fmt.Sprintf("result-%d", i), Done: true}
+			}
+			waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "result-7") })
+			if got := strings.Join(p.getSent(), "\n"); strings.Count(got, "Saved for Alpha") != 8 {
+				t.Fatal(got)
+			}
+			noQueueSession(t, a)
+		})
 	}
 }
