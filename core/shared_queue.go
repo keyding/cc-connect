@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ type sharedRequest struct {
 	Images                                                                []ImageAttachment
 	Files                                                                 []FileAttachment
 	Status                                                                string
+	ExitConfirmed                                                         bool
 	HistoryID, Result                                                     string
 }
 
@@ -33,6 +35,7 @@ type sharedQueue struct {
 	running  bool
 	guarded  bool
 	paused   bool
+	cancels  map[string]context.CancelFunc
 }
 
 // All engines in this process share directory exclusion. A failed/uncertain task
@@ -43,7 +46,7 @@ var sharedWorkspaces = struct {
 }{held: map[string]bool{}}
 
 func newSharedQueue(path string) *sharedQueue {
-	q := &sharedQueue{}
+	q := &sharedQueue{cancels: map[string]context.CancelFunc{}}
 	if path == "" {
 		q.err = fmt.Errorf("shared requests require persistent storage")
 		return q
@@ -73,8 +76,8 @@ func newSharedQueue(path string) *sharedQueue {
 				sharedWorkspaces.Unlock()
 			}
 			switch r.Status {
-			case "queued", "completed":
-			case "running", "interrupted":
+			case "queued", "completed", "cancelled", "stopped":
+			case "running", "stopping", "interrupted":
 				r.Status = "interrupted"
 				sharedWorkspaces.Lock()
 				sharedWorkspaces.held[r.WorkDir] = true
@@ -147,9 +150,9 @@ func (q *sharedQueue) accept(r sharedRequest) (ahead int, paused, duplicate bool
 		if old.Platform == r.Platform && old.Scope == r.Scope && old.MessageID == r.MessageID {
 			return 0, false, true, nil
 		}
-		if old.Session.ID == r.Session.ID && old.Status != "completed" {
+		if old.Session.ID == r.Session.ID && !sharedTerminal(old.Status) {
 			ahead++
-			if old.Status == "interrupted" {
+			if old.Status == "interrupted" || old.Status == "stopping" || old.Status == "stopped" {
 				paused = true
 			}
 		}
@@ -187,11 +190,13 @@ func (q *sharedQueue) take() (int, sharedRequest, bool, error) {
 		blocked := false
 		for _, old := range q.requests[:i] {
 			if old.Session.ID == r.Session.ID {
-				if old.Status != "completed" {
+				if !sharedTerminal(old.Status) {
 					blocked = true
 					break
 				}
-				r.HistoryID = old.HistoryID
+				if old.HistoryID != "" {
+					r.HistoryID = old.HistoryID
+				}
 			}
 		}
 		if blocked {
@@ -217,14 +222,20 @@ func (q *sharedQueue) take() (int, sharedRequest, bool, error) {
 	return 0, sharedRequest{}, false, nil
 }
 
-func (q *sharedQueue) finish(index int, history, result string, success bool) error {
+func (q *sharedQueue) finish(index int, history, result string, success bool, exited bool) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	next := append([]sharedRequest(nil), q.requests...)
 	r := &next[index]
 	r.HistoryID = history
 	r.Result = result
+	stopped := r.Status == "stopping"
+	r.ExitConfirmed = exited
 	r.Status = "interrupted"
+	if stopped && exited {
+		r.Status = "stopped"
+		success = false
+	}
 	if success {
 		r.Status = "completed"
 	}
@@ -235,7 +246,7 @@ func (q *sharedQueue) finish(index int, history, result string, success bool) er
 	q.requests = next
 	allCompleted := true
 	for _, request := range next {
-		if request.Status != "completed" {
+		if !sharedTerminal(request.Status) {
 			allCompleted = false
 			break
 		}
@@ -245,7 +256,7 @@ func (q *sharedQueue) finish(index int, history, result string, success bool) er
 			slog.Warn("clear completed shared writer guard", "error", err)
 		}
 	}
-	if success {
+	if exited {
 		sharedWorkspaces.Lock()
 		delete(sharedWorkspaces.held, r.WorkDir)
 		sharedWorkspaces.Unlock()
@@ -336,3 +347,5 @@ func syncAndCloseSharedFile(f *os.File) error {
 	}
 	return errors.Join(syncErr, closeErr)
 }
+
+func sharedTerminal(status string) bool { return status == "completed" || status == "cancelled" }

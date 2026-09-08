@@ -715,7 +715,131 @@ const (
 	MsgSharedCommands         MsgKey = "shared_sharedcommands"
 )
 
+const (
+	MsgQueueTitle           MsgKey = "QueueTitle"
+	MsgQueueEntry           MsgKey = "QueueEntry"
+	MsgQueueDenied          MsgKey = "QueueDenied"
+	MsgQueueStale           MsgKey = "QueueStale"
+	MsgQueueBlocked         MsgKey = "QueueBlocked"
+	MsgQueueResumed         MsgKey = "QueueResumed"
+	MsgQueueStopping        MsgKey = "QueueStopping"
+	MsgQueueCancelled       MsgKey = "QueueCancelled"
+	MsgQueueQueued          MsgKey = "QueueQueued"
+	MsgQueueRunning         MsgKey = "QueueRunning"
+	MsgQueueStoppingStatus  MsgKey = "QueueStoppingStatus"
+	MsgQueueStopped         MsgKey = "QueueStopped"
+	MsgQueueInterrupted     MsgKey = "QueueInterrupted"
+	MsgQueueCancelledStatus MsgKey = "QueueCancelledStatus"
+	MsgQueueCompleted       MsgKey = "QueueCompleted"
+)
+
 var messages = map[MsgKey]map[Language]string{
+	MsgQueueTitle: {
+		LangEnglish:            "Queue for %s (%s):",
+		LangChinese:            "会话 %s（%s）的队列：",
+		LangTraditionalChinese: "會話 %s（%s）的佇列：",
+		LangJapanese:           "会話 %s（%s）のキュー：",
+		LangSpanish:            "Cola de %s (%s):",
+	},
+	MsgQueueEntry: {
+		LangEnglish:            "%s — requester %s — %s",
+		LangChinese:            "%s — 发起人 %s — %s",
+		LangTraditionalChinese: "%s — 發起人 %s — %s",
+		LangJapanese:           "%s — 依頼者 %s — %s",
+		LangSpanish:            "%s — solicitante %s — %s",
+	},
+	MsgQueueDenied: {
+		LangEnglish:            "Only the requester may cancel this queued task, and current authorization is required.",
+		LangChinese:            "仅发起人可取消自己的排队任务，且需要当前授权。",
+		LangTraditionalChinese: "僅發起人可取消自己的排隊任務，且需要目前授權。",
+		LangJapanese:           "取消は現在権限のある依頼者のみ可能です。",
+		LangSpanish:            "Solo el solicitante autorizado puede cancelar su tarea pendiente.",
+	},
+	MsgQueueStale: {
+		LangEnglish:            "Control expired or target unavailable. Use /queue to refresh.",
+		LangChinese:            "控制已失效或目标不可用，请用 /queue 刷新。",
+		LangTraditionalChinese: "控制已失效或目標不可用，請用 /queue 更新。",
+		LangJapanese:           "操作が失効したか対象がありません。/queue で更新してください。",
+		LangSpanish:            "Control caducado o destino no disponible. Actualiza con /queue.",
+	},
+	MsgQueueBlocked: {
+		LangEnglish:            "Queue remains paused: executor exit or interruption handling is still pending.",
+		LangChinese:            "队列仍暂停：执行者尚未确认退出或中断仍待处理。",
+		LangTraditionalChinese: "佇列仍暫停：執行者尚未確認退出或中斷仍待處理。",
+		LangJapanese:           "キューは停止中です。実行終了の確認または中断処理が必要です。",
+		LangSpanish:            "La cola sigue pausada: falta confirmar la salida o resolver la interrupción.",
+	},
+	MsgQueueResumed: {
+		LangEnglish:            "Queue resumed for %s; only unstarted requests will run.",
+		LangChinese:            "会话 %s 的队列已恢复，仅执行尚未开始的请求。",
+		LangTraditionalChinese: "會話 %s 的佇列已恢復，僅執行尚未開始的請求。",
+		LangJapanese:           "%s のキューを再開しました。未開始の依頼のみ実行します。",
+		LangSpanish:            "Cola de %s reanudada; solo se ejecutarán solicitudes sin iniciar.",
+	},
+	MsgQueueStopping: {
+		LangEnglish:            "Stop requested for %s / requester %s / %s. Queue retained and paused until executor exit is confirmed.",
+		LangChinese:            "已请求停止 %s / 发起人 %s / %s。队列保留并暂停，等待确认执行者退出。",
+		LangTraditionalChinese: "已請求停止 %s / 發起人 %s / %s。佇列保留並暫停，等待確認執行者退出。",
+		LangJapanese:           "停止要求: %s / 依頼者 %s / %s。キューを保持し終了確認まで停止します。",
+		LangSpanish:            "Parada solicitada: %s / solicitante %s / %s. Cola conservada y pausada hasta confirmar salida.",
+	},
+	MsgQueueCancelled: {
+		LangEnglish:            "Cancelled %s / requester %s / %s.",
+		LangChinese:            "已取消 %s / 发起人 %s / %s。",
+		LangTraditionalChinese: "已取消 %s / 發起人 %s / %s。",
+		LangJapanese:           "取消済み: %s / 依頼者 %s / %s。",
+		LangSpanish:            "Cancelada: %s / solicitante %s / %s.",
+	},
+	MsgQueueQueued: {
+		LangEnglish:            "queued",
+		LangChinese:            "排队中",
+		LangTraditionalChinese: "排隊中",
+		LangJapanese:           "待機中",
+		LangSpanish:            "en cola",
+	},
+	MsgQueueRunning: {
+		LangEnglish:            "running",
+		LangChinese:            "执行中",
+		LangTraditionalChinese: "執行中",
+		LangJapanese:           "実行中",
+		LangSpanish:            "en ejecución",
+	},
+	MsgQueueStoppingStatus: {
+		LangEnglish:            "stop requested; awaiting exit",
+		LangChinese:            "已请求停止，等待退出",
+		LangTraditionalChinese: "已請求停止，等待退出",
+		LangJapanese:           "停止要求済み・終了待ち",
+		LangSpanish:            "parada solicitada; esperando salida",
+	},
+	MsgQueueStopped: {
+		LangEnglish:            "stopped; queue paused",
+		LangChinese:            "已停止，队列暂停",
+		LangTraditionalChinese: "已停止，佇列暫停",
+		LangJapanese:           "停止済み・キュー停止中",
+		LangSpanish:            "detenida; cola pausada",
+	},
+	MsgQueueInterrupted: {
+		LangEnglish:            "interrupted; resolution required",
+		LangChinese:            "中断，待处理",
+		LangTraditionalChinese: "中斷，待處理",
+		LangJapanese:           "中断・対応が必要",
+		LangSpanish:            "interrumpida; requiere resolución",
+	},
+	MsgQueueCancelledStatus: {
+		LangEnglish:            "cancelled",
+		LangChinese:            "已取消",
+		LangTraditionalChinese: "已取消",
+		LangJapanese:           "取消済み",
+		LangSpanish:            "cancelada",
+	},
+	MsgQueueCompleted: {
+		LangEnglish:            "completed",
+		LangChinese:            "已完成",
+		LangTraditionalChinese: "已完成",
+		LangJapanese:           "完了",
+		LangSpanish:            "completada",
+	},
+
 	MsgSharedNotAccepted: {
 		LangEnglish:            "Task not accepted: request, attachments or reply destination could not be saved.",
 		LangChinese:            "任务未接收：请求、附件或回复位置未能保存。",
@@ -731,11 +855,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "Guardada para %s; hay %d solicitudes delante.",
 	},
 	MsgSharedPaused: {
-		LangEnglish:            "Queue paused: execution failed, was interrupted or could not be confirmed. Saved requests are retained; manual recovery is not available yet.",
-		LangChinese:            "队列已暂停：执行失败、中断或结果无法确认。已保存请求保留；人工恢复入口尚未提供。",
-		LangTraditionalChinese: "佇列已暫停：執行失敗、中斷或結果無法確認。已儲存請求保留；人工恢復入口尚未提供。",
-		LangJapanese:           "実行失敗、中断または結果不明のためキューを停止しました。保存済みリクエストは保持されます。手動復旧はまだ未対応です。",
-		LangSpanish:            "Cola pausada: ejecución fallida, interrumpida o incierta. Se conservan las solicitudes; la recuperación manual aún no está disponible.",
+		LangEnglish:            "Queue paused: execution failed, was interrupted or could not be confirmed. Saved requests are retained. Use /queue to inspect and /resume after confirmed stop.",
+		LangChinese:            "队列已暂停：执行失败、中断或结果无法确认。已保存请求保留；用 /queue 查看，确认停止后用 /resume 恢复。",
+		LangTraditionalChinese: "佇列已暫停：執行失敗、中斷或結果無法確認。已儲存請求保留；用 /queue 查看，確認停止後用 /resume 恢復。",
+		LangJapanese:           "実行失敗、中断または結果不明のためキューを停止しました。保存済みリクエストは保持されます。/queue で確認し、停止確認後に /resume で再開できます。",
+		LangSpanish:            "Cola pausada: ejecución fallida, interrumpida o incierta. Se conservan las solicitudes; usa /queue para consultar y /resume tras confirmar la parada.",
 	},
 	MsgSharedWaiting: {
 		LangEnglish:            "Agent is waiting for interaction. The queue and working directory remain locked; shared interaction controls are not available yet.",
@@ -808,11 +932,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "La ejecución compartida no está disponible en esta vista previa. La tarea no se aceptó ni guardó.",
 	},
 	MsgSharedCommands: {
-		LangEnglish:            "Shared mode supports /new, /list, /switch, /name and /current.",
-		LangChinese:            "共享模式支持 /new、/list、/switch、/name 和 /current。",
-		LangTraditionalChinese: "共享模式支援 /new、/list、/switch、/name 和 /current。",
-		LangJapanese:           "共有モードは /new、/list、/switch、/name、/current に対応しています。",
-		LangSpanish:            "El modo compartido admite /new, /list, /switch, /name y /current.",
+		LangEnglish:            "Shared mode supports /new, /list, /switch, /name and /current, /queue, /cancel, /stop, /resume.",
+		LangChinese:            "共享模式支持 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume。",
+		LangTraditionalChinese: "共享模式支援 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume。",
+		LangJapanese:           "共有モードは /new、/list、/switch、/name、/current, /queue, /cancel, /stop, /resume に対応しています。",
+		LangSpanish:            "El modo compartido admite /new, /list, /switch, /name y /current, /queue, /cancel, /stop, /resume.",
 	},
 
 	MsgStarting: {

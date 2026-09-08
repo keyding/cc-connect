@@ -1879,3 +1879,8 @@ func (p *Platform) rejectSharedAttachment(msg *models.Message, target replyConte
 	}
 	p.dispatchMessage(&core.Message{Platform: "telegram", MessageID: strconv.Itoa(msg.ID), UserID: strconv.FormatInt(msg.From.ID, 10), ReplyCtx: target, AttachmentError: err}, msg)
 }
+
+// AuthorizeSharedControl rechecks the current allow list for bound controls.
+func (p *Platform) AuthorizeSharedControl(scope, userID string) bool {
+	return scope != "" && core.AllowList(p.allowFrom, userID)
+}
