@@ -468,6 +468,15 @@ func newClaudeSession(ctx context.Context, workDir, cliBin string, cliExtraArgs 
 		cancel()
 		return nil, fmt.Errorf("claudeSession: start: %w", err)
 	}
+	if err := core.CheckpointSharedExecutor(ctx, cmd.Process.Pid); err != nil {
+		_ = forceKillCmd(cmd)
+		_ = cmd.Wait()
+		cancel()
+		if promptFilePath != "" && !promptFileIsShared {
+			_ = os.Remove(promptFilePath)
+		}
+		return nil, fmt.Errorf("checkpoint shared executor: %w", err)
+	}
 
 	// Only remember the prompt path for cleanup when it is the per-spawn
 	// temp variant. The shared cc-connect-system.md file is reused across
@@ -655,6 +664,9 @@ func (cs *claudeSession) handleSystem(raw map[string]any) {
 	if sid, ok := raw["session_id"].(string); ok && sid != "" {
 		cs.sessionID.Store(sid)
 		evt := core.Event{Type: core.EventText, SessionID: sid}
+		if err := core.CheckpointSharedHistory(cs.ctx, sid); err != nil {
+			evt = core.Event{Type: core.EventError, Error: fmt.Errorf("checkpoint shared history: %w", err)}
+		}
 		select {
 		case cs.events <- evt:
 		case <-cs.ctx.Done():

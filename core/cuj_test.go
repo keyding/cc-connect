@@ -3062,3 +3062,300 @@ func TestCUJ_B16_ControlRechecksCurrentAuthorization(t *testing.T) {
 	first.events <- Event{Type: EventResult, Content: "authorized result", Done: true}
 	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "authorized result") })
 }
+
+func TestCUJ_B17_InterruptedRequestNeedsOwnerWarningAndExplicitRecovery(t *testing.T) {
+	dir, path := t.TempDir(), filepath.Join(t.TempDir(), "state")
+	artifact := filepath.Join(dir, "existing-work.txt")
+	if err := os.WriteFile(artifact, []byte("preserved result"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	e, p, a := newQueueEngine(t, dir, path)
+	queueMessage(e, p, "alice", "1", "/new Alpha")
+	queueMessage(e, p, "alice", "2", "first")
+	first := nextQueueSession(t, a)
+	<-first.sent
+	queueMessage(e, p, "alice", "3", "unstarted")
+	first.events <- Event{Type: EventError, Error: fmt.Errorf("uncertain tool result")}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "Queue paused") })
+	if err := e.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	restored, rp, ra := newQueueEngine(t, dir, path)
+	if err := restored.Start(); err != nil {
+		t.Fatal(err)
+	}
+	send := func(user, id, content string) string {
+		before := len(rp.getSent())
+		queueMessage(restored, rp, user, id, content)
+		return strings.Join(rp.getSent()[before:], "\n")
+	}
+	send("bob", "4", "/switch 1")
+	listing := send("bob", "5", "/queue")
+	request := ""
+	for _, line := range strings.Split(listing, "\n") {
+		if strings.HasPrefix(line, "/resolve ") {
+			request = strings.TrimPrefix(line, "/resolve ")
+		}
+	}
+	if request == "" {
+		t.Fatal(listing)
+	}
+	if got := send("bob", "6", "/continue "+request); !strings.Contains(got, "Only the requester") {
+		t.Fatal(got)
+	}
+	if got := send("alice", "7", "/continue "+request+" confirm"); !strings.Contains(got, "choose the interrupted") {
+		t.Fatal(got)
+	}
+	if got := send("alice", "8", "/continue "+request); !strings.Contains(got, "may already have executed tools") {
+		t.Fatal(got)
+	}
+	if got := send("alice", "9", "/continue "+request+" confirm"); !strings.Contains(got, "continuation is unavailable") {
+		t.Fatal(got)
+	}
+	noQueueSession(t, ra)
+	if got := send("bob", "10", "/resolve "+request); !strings.Contains(got, "preserved existing work") {
+		t.Fatal(got)
+	}
+	noQueueSession(t, ra)
+	if got := send("bob", "11", "/resolve "+request); !strings.Contains(got, "expired") {
+		t.Fatal(got)
+	}
+	if got := send("bob", "12", "/resume "+request); !strings.Contains(got, "Queue resumed") {
+		t.Fatal(got)
+	}
+	next := nextQueueSession(t, ra)
+	if got := <-next.sent; !strings.Contains(got, "unstarted") {
+		t.Fatal(got)
+	}
+	if got := send("bob", "13", "/resume "+request); !strings.Contains(got, "remains paused") && !strings.Contains(got, "expired") {
+		t.Fatal(got)
+	}
+	next.events <- Event{Type: EventResult, Content: "unstarted complete", Done: true}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(rp.getSent(), "\n"), "unstarted complete") })
+	noQueueSession(t, ra)
+	if data, err := os.ReadFile(artifact); err != nil || string(data) != "preserved result" {
+		t.Fatalf("existing work changed: %q %v", data, err)
+	}
+}
+
+func TestCUJ_B17_CompletionSaveFailureCanBeResolvedWithoutReplay(t *testing.T) {
+	storage := filepath.Join(t.TempDir(), "state")
+	e, p, a := newQueueEngine(t, t.TempDir(), filepath.Join(storage, "s"))
+	queueMessage(e, p, "alice", "1", "/new Alpha")
+	queueMessage(e, p, "alice", "2", "first")
+	first := nextQueueSession(t, a)
+	<-first.sent
+	queueMessage(e, p, "alice", "3", "second")
+	restore := breakQueueStorage(t, storage)
+	first.events <- Event{Type: EventResult, Content: "possibly delivered", Done: true}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "Queue paused") })
+	restore()
+	before := len(p.getSent())
+	queueMessage(e, p, "alice", "4", "/queue")
+	listing := strings.Join(p.getSent()[before:], "\n")
+	request := ""
+	for _, line := range strings.Split(listing, "\n") {
+		if strings.HasPrefix(line, "/resolve ") {
+			request = strings.TrimPrefix(line, "/resolve ")
+		}
+	}
+	if request == "" {
+		t.Fatal(listing)
+	}
+	queueMessage(e, p, "bob", "5", "/resolve "+request)
+	noQueueSession(t, a)
+	queueMessage(e, p, "bob", "6", "/resume "+request)
+	next := nextQueueSession(t, a)
+	if got := <-next.sent; !strings.Contains(got, "second") {
+		t.Fatal(got)
+	}
+	next.events <- Event{Type: EventResult, Content: "second complete", Done: true}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "second complete") })
+	noQueueSession(t, a)
+}
+
+func TestCUJ_B17_ResolvingOldTaskDoesNotUnlockAnotherExecutor(t *testing.T) {
+	e, p, a := newQueueEngine(t, t.TempDir(), filepath.Join(t.TempDir(), "state"))
+	queueMessage(e, p, "alice", "1", "/new Alpha")
+	queueMessage(e, p, "alice", "2", "failed first")
+	first := nextQueueSession(t, a)
+	<-first.sent
+	queueMessage(e, p, "alice", "3", "queued Alpha")
+	first.events <- Event{Type: EventError, Error: fmt.Errorf("failed")}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "Queue paused") })
+	queueMessage(e, p, "bob", "4", "/new Beta")
+	queueMessage(e, p, "bob", "5", "running Beta")
+	beta := nextQueueSession(t, a)
+	<-beta.sent
+	// No-target recovery binds Alice's current Alpha, independently of Bob's Beta.
+	queueMessage(e, p, "alice", "6", "/resolve")
+	queueMessage(e, p, "alice", "7", "/resume")
+	noQueueSession(t, a)
+	beta.events <- Event{Type: EventResult, Content: "Beta finished", Done: true}
+	next := nextQueueSession(t, a)
+	if got := <-next.sent; !strings.Contains(got, "queued Alpha") {
+		t.Fatal(got)
+	}
+	next.events <- Event{Type: EventResult, Content: "Alpha finished", Done: true}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "Alpha finished") })
+}
+
+func TestCUJ_B17_UncommittedCompletionRestartsAsInterruptedWithExitProof(t *testing.T) {
+	dir, path := t.TempDir(), filepath.Join(t.TempDir(), "state")
+	e, p, a := newQueueEngine(t, dir, path)
+	queueMessage(e, p, "alice", "1", "/new Alpha")
+	queueMessage(e, p, "alice", "2", "first")
+	first := nextQueueSession(t, a)
+	<-first.sent
+	queueMessage(e, p, "alice", "3", "second")
+	restore := breakQueueSnapshot(t, path)
+	first.events <- Event{Type: EventResult, Content: "uncommitted completion", Done: true}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "Queue paused") })
+	restore()
+	if err := e.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	restored, rp, ra := newQueueEngine(t, dir, path)
+	if err := restored.Start(); err != nil {
+		t.Fatal(err)
+	}
+	queueMessage(restored, rp, "alice", "4", "/queue")
+	if got := strings.Join(rp.getSent(), "\n"); !strings.Contains(got, "interrupted; resolution required") {
+		t.Fatal(got)
+	}
+	noQueueSession(t, ra)
+	queueMessage(restored, rp, "alice", "5", "/resolve")
+	queueMessage(restored, rp, "alice", "6", "/resume")
+	next := nextQueueSession(t, ra)
+	if got := <-next.sent; !strings.Contains(got, "second") {
+		t.Fatal(got)
+	}
+	next.events <- Event{Type: EventResult, Content: "second complete", Done: true}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(rp.getSent(), "\n"), "second complete") })
+	noQueueSession(t, ra)
+}
+
+func TestCUJ_B17_UncommittedAdmissionIsNotExecutedAfterRestart(t *testing.T) {
+	dir, path := t.TempDir(), filepath.Join(t.TempDir(), "state")
+	e, p, a := newQueueEngine(t, dir, path)
+	queueMessage(e, p, "alice", "1", "/new Alpha")
+	queueMessage(e, p, "alice", "2", "first")
+	first := nextQueueSession(t, a)
+	<-first.sent
+	first.events <- Event{Type: EventResult, Content: "first complete", Done: true}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "first complete") })
+	restore := breakQueueSnapshot(t, path)
+	before := len(p.getSent())
+	queueMessage(e, p, "alice", "3", "unaccepted")
+	if got := strings.Join(p.getSent()[before:], "\n"); !strings.Contains(got, "Task not accepted") {
+		t.Fatal(got)
+	}
+	restore()
+	if err := e.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	restored, rp, ra := newQueueEngine(t, dir, path)
+	if err := restored.Start(); err != nil {
+		t.Fatal(err)
+	}
+	noQueueSession(t, ra)
+	queueMessage(restored, rp, "alice", "3", "unaccepted")
+	next := nextQueueSession(t, ra)
+	if got := <-next.sent; !strings.Contains(got, "unaccepted") {
+		t.Fatal(got)
+	}
+	next.events <- Event{Type: EventResult, Content: "retry complete", Done: true}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(rp.getSent(), "\n"), "retry complete") })
+	noQueueSession(t, ra)
+}
+
+// This decorator injects a final commit error around the real durable writer.
+// It substitutes the authorized persistence fault boundary, not queue behavior.
+type uncertainCommitWriter struct {
+	real    sharedSnapshotWriter
+	written bool
+}
+
+func (w uncertainCommitWriter) writeSnapshot(path string, value any) error {
+	if journal, ok := value.(sharedQueueJournal); ok && journal.Committed {
+		if w.written {
+			if err := w.real.writeSnapshot(path, value); err != nil {
+				return err
+			}
+		}
+		return fmt.Errorf("injected final checkpoint fsync failure")
+	}
+	return w.real.writeSnapshot(path, value)
+}
+
+func TestCUJ_B17_UncertainAdmissionFencesExecutionAndProvidesStableLookup(t *testing.T) {
+	for _, committed := range []bool{false, true} {
+		t.Run(fmt.Sprint(committed), func(t *testing.T) {
+			dir, path := t.TempDir(), filepath.Join(t.TempDir(), "state")
+			e, p, a := newQueueEngine(t, dir, path)
+			queueMessage(e, p, "alice", "1", "/new Alpha")
+			e.sharedQueue.writer = uncertainCommitWriter{real: e.sharedQueue.writer, written: committed}
+			accepted := false
+			e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: "alice", UserID: "alice", MessageID: "2", Content: "unconfirmed task", ReplyCtx: "original-topic", OnAccepted: func() { accepted = true }})
+			if accepted {
+				t.Fatal("uncertain admission falsely acknowledged success")
+			}
+			got := strings.Join(p.getSent(), "\n")
+			if !strings.Contains(got, "Acceptance is unconfirmed") || strings.Contains(got, "Task not accepted") || strings.Contains(got, "Saved for Alpha") {
+				t.Fatal(got)
+			}
+			lookupParts := strings.SplitN(got, "/queue ", 2)
+			if len(lookupParts) != 2 {
+				t.Fatal(got)
+			}
+			lookup := strings.Fields(lookupParts[1])[0]
+			// /queue's current default is the same stable session shown in the error.
+			before := len(p.getSent())
+			queueMessage(e, p, "alice", "3", "/queue")
+			listing := strings.Join(p.getSent()[before:], "\n")
+			if !strings.Contains(listing, "requester alice — acceptance unconfirmed") {
+				t.Fatal(listing)
+			}
+			queueMessage(e, p, "alice", "4", "/queue "+lookup)
+			before = len(p.getSent())
+			queueMessage(e, p, "alice", "2", "duplicate unconfirmed task")
+			if got := strings.Join(p.getSent()[before:], "\n"); !strings.Contains(got, "Acceptance is unconfirmed") {
+				t.Fatal(got)
+			}
+			before = len(p.getSent())
+			queueMessage(e, p, "alice", "5", "definitely rejected")
+			if got := strings.Join(p.getSent()[before:], "\n"); !strings.Contains(got, "Task not accepted") {
+				t.Fatal(got)
+			}
+			noQueueSession(t, a)
+			queueMessage(e, p, "alice", "6", "/queue")
+			if !strings.Contains(strings.Join(p.getSent(), "\n"), "acceptance unconfirmed") {
+				t.Fatal("lost unknown receipt")
+			}
+			if err := e.Stop(); err != nil {
+				t.Fatal(err)
+			}
+			restored, rp, ra := newQueueEngine(t, dir, path)
+			if err := restored.Start(); err != nil {
+				t.Fatal(err)
+			}
+			if !committed {
+				noQueueSession(t, ra)
+				queueMessage(restored, rp, "alice", "7", "/queue")
+				if got := strings.Join(rp.getSent(), "\n"); strings.Contains(got, "requester alice") {
+					t.Fatal(got)
+				}
+				// The user checks absence before an explicit new submission.
+				queueMessage(restored, rp, "alice", "2", "unconfirmed task")
+			}
+			next := nextQueueSession(t, ra)
+			if got := <-next.sent; !strings.Contains(got, "unconfirmed task") {
+				t.Fatal(got)
+			}
+			queueMessage(restored, rp, "alice", "2", "unconfirmed task")
+			next.events <- Event{Type: EventResult, Content: "completed once", Done: true}
+			waitQueue(t, func() bool { return strings.Contains(strings.Join(rp.getSent(), "\n"), "completed once") })
+			noQueueSession(t, ra)
+		})
+	}
+}

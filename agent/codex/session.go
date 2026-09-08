@@ -167,6 +167,11 @@ func (cs *codexSession) Send(prompt string, messageID string, images []core.Imag
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("codexSession: start: %w", err)
 	}
+	if err := core.CheckpointSharedExecutor(cs.ctx, cmd.Process.Pid); err != nil {
+		_ = forceKillCmd(cmd)
+		_ = cmd.Wait()
+		return fmt.Errorf("checkpoint shared executor: %w", err)
+	}
 	cs.addCmd(cmd)
 
 	cs.wg.Add(1)
@@ -376,6 +381,13 @@ func (cs *codexSession) handleEvent(raw map[string]any) {
 	case "thread.started":
 		if tid, ok := raw["thread_id"].(string); ok {
 			cs.threadID.Store(tid)
+			if err := core.CheckpointSharedHistory(cs.ctx, tid); err != nil {
+				select {
+				case cs.events <- core.Event{Type: core.EventError, Error: fmt.Errorf("checkpoint shared history: %w", err)}:
+				case <-cs.ctx.Done():
+				}
+				return
+			}
 			cs.contextMu.Lock()
 			cs.sessionFile = ""
 			cs.contextUsage = nil
