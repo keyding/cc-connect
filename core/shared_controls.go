@@ -27,13 +27,18 @@ func (e *Engine) handleSharedControl(p Platform, msg *Message, command string, a
 	target := ""
 	if len(args) == 1 {
 		target = args[0]
-	} else if len(args) > 1 {
+	} else if len(args) > 1 && (command != "continue" || len(args) != 2 || args[1] != "confirm") {
 		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgQueueStale))
 		return
 	}
 	q := e.sharedQueue
 	q.mu.Lock()
-	text, err := e.sharedControlLocked(q, scope, msg, command, sessionID, target)
+	var text string
+	if command == "resolve" || command == "continue" {
+		text, err = e.sharedRecoveryLocked(q, scope, msg, command, args)
+	} else {
+		text, err = e.sharedControlLocked(q, scope, msg, command, sessionID, target)
+	}
 	q.mu.Unlock()
 	if err != nil {
 		slog.Error("persist shared control", "error", err)
@@ -138,6 +143,9 @@ func queueStatusKey(status string) MsgKey {
 
 func (e *Engine) sharedQueueView(q *sharedQueue, s sharedSession) string {
 	lines := []string{e.i18n.Tf(MsgQueueTitle, s.Name, s.ID)}
+	if r := q.uncertainAdmission; r != nil && r.Session.ID == s.ID {
+		lines = append(lines, e.i18n.Tf(MsgQueueEntry, r.ID, r.UserID, e.i18n.T(MsgRecoveryAdmissionStatus)))
+	}
 	if q.paused {
 		lines = append(lines, e.i18n.T(MsgSharedPaused))
 	}
@@ -152,6 +160,9 @@ func (e *Engine) sharedQueueView(q *sharedQueue, s sharedSession) string {
 		}
 		if r.Status == "running" {
 			line += "\n/stop " + r.ID
+		}
+		if r.Status == "interrupted" {
+			line += "\n/resolve " + r.ID + "\n/continue " + r.ID
 		}
 		if r.Status == "stopped" {
 			line += "\n/resume " + r.ID

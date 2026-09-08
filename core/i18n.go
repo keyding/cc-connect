@@ -735,6 +735,19 @@ const (
 	MsgQueueCompleted       MsgKey = "QueueCompleted"
 )
 
+const (
+	MsgRecoveryChoose      MsgKey = "RecoveryChoose"
+	MsgRecoveryOwner       MsgKey = "RecoveryOwner"
+	MsgRecoveryWarning     MsgKey = "RecoveryWarning"
+	MsgRecoveryUnavailable MsgKey = "RecoveryUnavailable"
+	MsgRecoveryResolved    MsgKey = "RecoveryResolved"
+)
+
+const (
+	MsgRecoveryAcceptanceUnknown MsgKey = "RecoveryAcceptanceUnknown"
+	MsgRecoveryAdmissionStatus   MsgKey = "RecoveryAdmissionStatus"
+)
+
 var messages = map[MsgKey]map[Language]string{
 	MsgSharedProgress: {
 		LangEnglish:            "Working: %s",
@@ -743,6 +756,57 @@ var messages = map[MsgKey]map[Language]string{
 		LangJapanese:           "実行中：%s",
 		LangSpanish:            "En curso: %s",
 	},
+	MsgRecoveryAcceptanceUnknown: {
+		LangEnglish:            "Acceptance is unconfirmed for request %s in %s. Execution is fenced in this process. After storage repair and restart, the request may be retained or absent; check /queue %s before submitting anything again.",
+		LangChinese:            "会话请求 %s（%s）的接收结果无法确认。当前进程已阻止继续执行。修复存储并重启后，该请求可能保留或不存在；再次提交前请检查 /queue %s。",
+		LangTraditionalChinese: "會話請求 %s（%s）的接收結果無法確認。目前程序已阻止繼續執行。修復儲存並重啟後，該請求可能保留或不存在；再次提交前請檢查 /queue %s。",
+		LangJapanese:           "依頼 %s（%s）の受付結果を確認できません。このプロセスでは実行を停止しています。保存先の修復と再起動後に依頼が残る場合と残らない場合があります。再送前に /queue %s を確認してください。",
+		LangSpanish:            "La aceptación de %s en %s no está confirmada. Este proceso bloquea la ejecución. Tras reparar el almacenamiento y reiniciar, la solicitud puede conservarse o no; consulta /queue %s antes de volver a enviarla.",
+	},
+	MsgRecoveryAdmissionStatus: {
+		LangEnglish:            "acceptance unconfirmed; storage repair and restart required",
+		LangChinese:            "接收未确认；需要修复存储并重启",
+		LangTraditionalChinese: "接收未確認；需要修復儲存並重啟",
+		LangJapanese:           "受付未確認・保存先の修復と再起動が必要",
+		LangSpanish:            "aceptación no confirmada; requiere reparar almacenamiento y reiniciar",
+	},
+
+	MsgRecoveryChoose: {
+		LangEnglish:            "Use /queue and choose the interrupted request.",
+		LangChinese:            "请用 /queue 查看并选择中断请求。",
+		LangTraditionalChinese: "請用 /queue 查看並選擇中斷請求。",
+		LangJapanese:           "/queue で中断した依頼を選択してください。",
+		LangSpanish:            "Usa /queue y elige la solicitud interrumpida.",
+	},
+	MsgRecoveryOwner: {
+		LangEnglish:            "Only the requester may choose to continue this interrupted task.",
+		LangChinese:            "仅发起人可选择继续此中断任务。",
+		LangTraditionalChinese: "僅發起人可選擇繼續此中斷任務。",
+		LangJapanese:           "中断タスクの続行は依頼者のみ選択できます。",
+		LangSpanish:            "Solo el solicitante puede elegir continuar esta tarea interrumpida.",
+	},
+	MsgRecoveryWarning: {
+		LangEnglish:            "%s / requester %s / %s may already have executed tools and changed files. Continuing cannot undo or safely repeat those actions. To check whether progress continuation is supported: /continue %s confirm",
+		LangChinese:            "%s / 发起人 %s / %s 可能已经执行工具并修改文件。继续不能撤销或安全重复这些操作。确认查看是否支持基于进度继续：/continue %s confirm",
+		LangTraditionalChinese: "%s / 發起人 %s / %s 可能已經執行工具並修改檔案。繼續不能撤銷或安全重複這些操作。確認查看是否支援基於進度繼續：/continue %s confirm",
+		LangJapanese:           "%s / 依頼者 %s / %s は既にツールを実行し、ファイルを変更した可能性があります。続行で取り消したり安全に繰り返すことはできません。対応状況を確認: /continue %s confirm",
+		LangSpanish:            "%s / solicitante %s / %s puede haber ejecutado herramientas y modificado archivos. Continuar no deshace ni permite repetir esas acciones con seguridad. Comprueba la compatibilidad: /continue %s confirm",
+	},
+	MsgRecoveryUnavailable: {
+		LangEnglish:            "Reliable interrupted-progress continuation is unavailable for this executor. Inspect the existing results, resolve this task with /resolve %s, then explicitly resume the queue and submit a new instruction describing what remains. The original task was not replayed.",
+		LangChinese:            "此执行者不支持可靠接续中断进度。请检查已有成果，用 /resolve %s 结束此任务，再明确恢复队列并提交描述剩余工作的新指令。原任务未重放。",
+		LangTraditionalChinese: "此執行者不支援可靠接續中斷進度。請檢查已有成果，用 /resolve %s 結束此任務，再明確恢復佇列並提交描述剩餘工作的新指令。原任務未重放。",
+		LangJapanese:           "この実行環境では中断地点からの安全な続行は未対応です。成果を確認し /resolve %s で終了後、キューを明示的に再開し残りの作業を新しく依頼してください。元の依頼は再実行していません。",
+		LangSpanish:            "Este ejecutor no admite continuación fiable del progreso interrumpido. Revisa los resultados, cierra con /resolve %s, reanuda la cola explícitamente y envía instrucciones nuevas para el trabajo restante. No se repitió la tarea original.",
+	},
+	MsgRecoveryResolved: {
+		LangEnglish:            "Ended %s / requester %s / %s and preserved existing work. Queue remains paused. Resume unstarted requests explicitly: /resume %s",
+		LangChinese:            "已结束 %s / 发起人 %s / %s，并保留已有成果。队列仍暂停。明确恢复尚未开始的请求：/resume %s",
+		LangTraditionalChinese: "已結束 %s / 發起人 %s / %s，並保留已有成果。佇列仍暫停。明確恢復尚未開始的請求：/resume %s",
+		LangJapanese:           "%s / 依頼者 %s / %s を終了し成果を保持しました。キューは停止中です。未開始の依頼を明示的に再開: /resume %s",
+		LangSpanish:            "Finalizada %s / solicitante %s / %s; trabajo conservado. La cola sigue pausada. Reanuda solo solicitudes sin iniciar: /resume %s",
+	},
+
 	MsgSharedReplyUnavailable: {
 		LangEnglish:            "This reply cannot be linked to an accessible session. Select a session and send again.",
 		LangChinese:            "无法确认此回复所属的可访问会话。请选择会话后重新发送。",
@@ -948,11 +1012,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "La ejecución compartida no está disponible en esta vista previa. La tarea no se aceptó ni guardó.",
 	},
 	MsgSharedCommands: {
-		LangEnglish:            "Shared mode supports /new, /list, /switch, /name and /current, /queue, /cancel, /stop, /resume.",
-		LangChinese:            "共享模式支持 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume。",
-		LangTraditionalChinese: "共享模式支援 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume。",
-		LangJapanese:           "共有モードは /new、/list、/switch、/name、/current, /queue, /cancel, /stop, /resume に対応しています。",
-		LangSpanish:            "El modo compartido admite /new, /list, /switch, /name y /current, /queue, /cancel, /stop, /resume.",
+		LangEnglish:            "Shared mode supports /new, /list, /switch, /name and /current, /queue, /cancel, /stop, /resume, /resolve, /continue.",
+		LangChinese:            "共享模式支持 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume, /resolve, /continue。",
+		LangTraditionalChinese: "共享模式支援 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume, /resolve, /continue。",
+		LangJapanese:           "共有モードは /new、/list、/switch、/name、/current, /queue, /cancel, /stop, /resume, /resolve, /continue に対応しています。",
+		LangSpanish:            "El modo compartido admite /new, /list, /switch, /name y /current, /queue, /cancel, /stop, /resume, /resolve, /continue.",
 	},
 
 	MsgStarting: {

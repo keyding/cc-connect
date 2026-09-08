@@ -6772,7 +6772,7 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 	args := parts[1:]
 
 	cmdID := matchPrefix(cmd, builtinCommands)
-	if msg.SharedScope != "" && (cmd == "queue" || cmd == "cancel" || cmd == "resume") {
+	if msg.SharedScope != "" && (cmd == "queue" || cmd == "cancel" || cmd == "resume" || cmd == "resolve" || cmd == "continue") {
 		cmdID = cmd
 	}
 
@@ -6811,7 +6811,7 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 
 	if msg.SharedScope != "" {
 		switch cmdID {
-		case "queue", "cancel", "stop", "resume":
+		case "queue", "cancel", "stop", "resume", "resolve", "continue":
 			e.handleSharedControl(p, msg, cmdID, args)
 		case "new", "list", "switch", "name", "current":
 			e.handleSharedDirectory(p, msg, cmdID, args)

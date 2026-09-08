@@ -253,6 +253,7 @@ func (s *appServerSession) connect() error {
 	}
 	cmd := exec.CommandContext(s.ctx, "codex", args...)
 	cmd.Dir = s.workDir
+	prepareCmdForKill(cmd)
 	env := append([]string(nil), s.extraEnv...)
 	if s.codexHome != "" {
 		env = append(env, "CODEX_HOME="+s.codexHome)
@@ -275,6 +276,11 @@ func (s *appServerSession) connect() error {
 	}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("codex app-server start: %w", err)
+	}
+	if err := core.CheckpointSharedExecutor(s.ctx, cmd.Process.Pid); err != nil {
+		_ = forceKillCmd(cmd)
+		_ = cmd.Wait()
+		return fmt.Errorf("checkpoint shared executor: %w", err)
 	}
 
 	s.procMu.Lock()
@@ -336,6 +342,9 @@ func (s *appServerSession) ensureThread(resumeID string) error {
 		}
 		s.applyThreadRuntimeState(resp.Cwd, resp.Model, resp.ReasoningEffort)
 		s.threadID.Store(resp.Thread.ID)
+		if err := core.CheckpointSharedHistory(s.ctx, resp.Thread.ID); err != nil {
+			return fmt.Errorf("checkpoint shared history: %w", err)
+		}
 		slog.Info("codex app-server thread resumed", "thread_id", resp.Thread.ID)
 		return nil
 	}
@@ -349,6 +358,9 @@ func (s *appServerSession) ensureThread(resumeID string) error {
 	}
 	s.applyThreadRuntimeState(resp.Cwd, resp.Model, resp.ReasoningEffort)
 	s.threadID.Store(resp.Thread.ID)
+	if err := core.CheckpointSharedHistory(s.ctx, resp.Thread.ID); err != nil {
+		return fmt.Errorf("checkpoint shared history: %w", err)
+	}
 	slog.Info("codex app-server thread started", "thread_id", resp.Thread.ID)
 	return nil
 }
@@ -947,7 +959,7 @@ func (s *appServerSession) Close() error {
 		s.stdin = nil
 	}
 	if s.cmd != nil && s.cmd.Process != nil {
-		_ = s.cmd.Process.Kill()
+		_ = forceKillCmd(s.cmd)
 	}
 	s.procMu.Unlock()
 
@@ -1709,7 +1721,7 @@ func (s *appServerSession) abortTransport() {
 		s.stdin = nil
 	}
 	if s.cmd != nil && s.cmd.Process != nil {
-		_ = s.cmd.Process.Kill()
+		_ = forceKillCmd(s.cmd)
 	}
 	s.procMu.Unlock()
 }

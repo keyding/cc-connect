@@ -37,6 +37,11 @@ func (e *Engine) acceptSharedRequest(p Platform, msg *Message, s sharedSession) 
 	ahead, paused, duplicate, err := e.sharedQueue.accept(r)
 	if err != nil {
 		slog.Error("persist shared request", "error", err)
+		var unknown *sharedAdmissionUncertainError
+		if errors.As(err, &unknown) {
+			e.reply(p, msg.ReplyCtx, e.i18n.Tf(MsgRecoveryAcceptanceUnknown, unknown.ID, unknown.Session.Name, unknown.Session.ID))
+			return
+		}
 		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgSharedNotAccepted))
 		return
 	}
@@ -183,14 +188,24 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 	if err := ctx.Err(); err != nil {
 		return "", "", true, err
 	}
+	ctx = q.executorContext(ctx, r.ID)
 	as, err := e.startSharedAgent(ctx, r)
 	if err != nil {
-		return "", "", true, err
+		return "", "", q.executorStartFailed(r.ID), err
 	}
 	defer func() {
 		history = as.CurrentSessionID()
 		var settleErr error
 		exited, settleErr = settleSharedAgent(as)
+		if exited {
+			groupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			groupErr := waitSharedExecutorGroup(groupCtx, q.executorGroup(r.ID))
+			cancel()
+			if groupErr != nil {
+				exited = false
+				settleErr = errors.Join(settleErr, groupErr)
+			}
+		}
 		err = errors.Join(err, settleErr)
 	}()
 
