@@ -463,6 +463,14 @@ func (a *Agent) SetSessionEnv(env []string) {
 }
 
 func (a *Agent) StartSession(ctx context.Context, sessionID string) (core.AgentSession, error) {
+	return a.startSession(ctx, sessionID, nil)
+}
+
+// StartSessionWithEnv binds process-local routing without changing agent defaults.
+func (a *Agent) StartSessionWithEnv(ctx context.Context, sessionID string, env []string) (core.AgentSession, error) {
+	return a.startSession(ctx, sessionID, env)
+}
+func (a *Agent) startSession(ctx context.Context, sessionID string, env []string) (core.AgentSession, error) {
 	a.mu.Lock()
 	mode := a.mode
 	model := a.model
@@ -482,6 +490,7 @@ func (a *Agent) StartSession(ctx context.Context, sessionID string) (core.AgentS
 	extraEnv := append([]string(nil), a.configEnv...)
 	extraEnv = append(extraEnv, a.providerEnvLocked()...)
 	extraEnv = append(extraEnv, a.sessionEnv...)
+	extraEnv = append(extraEnv, env...)
 	var baseURL string
 	if a.activeIdx >= 0 && a.activeIdx < len(a.providers) {
 		if m := a.providers[a.activeIdx].Model; m != "" {

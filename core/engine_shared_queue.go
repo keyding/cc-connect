@@ -138,6 +138,7 @@ func (e *Engine) sharedReply(r sharedRequest, text string) {
 
 func (e *Engine) executeSharedRequest(index int, r sharedRequest) {
 	result, history, exited, err := e.runSharedAgent(r)
+	result, _ = stripTrailingSilent(result)
 	success := err == nil
 	if saveErr := e.sharedQueue.finish(index, history, result, success, exited); saveErr != nil {
 		slog.Error("shared completion not durable", "request", r.ID, "error", saveErr)
@@ -182,7 +183,7 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 	if err := ctx.Err(); err != nil {
 		return "", "", true, err
 	}
-	as, err := e.agent.StartSession(ctx, r.HistoryID)
+	as, err := e.startSharedAgent(ctx, r)
 	if err != nil {
 		return "", "", true, err
 	}
@@ -207,7 +208,12 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 		idleCh = idle.C
 		defer idle.Stop()
 	}
+	preview := e.sharedPreview(r, ctx)
+	if preview != nil {
+		defer preview.discard()
+	}
 	var texts strings.Builder
+	previewed := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -229,6 +235,12 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 			switch event.Type {
 			case EventText:
 				texts.WriteString(event.Content)
+				if preview != nil && !couldBeSilentPrefix(texts.String()) {
+					preview.appendText(texts.String()[previewed:])
+					previewed = texts.Len()
+				}
+			case EventToolUse:
+				e.sharedReply(r, e.i18n.Tf(MsgSharedProgress, event.ToolName))
 			case EventError:
 				return texts.String(), "", false, fmt.Errorf("agent execution failed: %v", event.Error)
 			case EventPermissionRequest:

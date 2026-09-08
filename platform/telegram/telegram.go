@@ -1025,6 +1025,12 @@ func (p *Platform) isDirectedAtBot(msg *models.Message) bool {
 		}
 	}
 
+	// External references may identify this bot across Topics. Missing identity
+	// is still dispatched so core can explicitly reject it.
+	if msg.ExternalReply != nil && p.replyReference(msg) != nil {
+		return true
+	}
+
 	// Check if replying to a message from this bot
 	if msg.ReplyToMessage != nil && msg.ReplyToMessage.From != nil {
 		slog.Debug("telegram: checking reply", "bot_id", self.ID, "reply_from_id", msg.ReplyToMessage.From.ID)
