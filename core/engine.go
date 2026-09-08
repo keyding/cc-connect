@@ -6772,6 +6772,9 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 	args := parts[1:]
 
 	cmdID := matchPrefix(cmd, builtinCommands)
+	if msg.SharedScope != "" && (cmd == "queue" || cmd == "cancel" || cmd == "resume") {
+		cmdID = cmd
+	}
 
 	// Resolve effective disabled commands: role-based if available, else project-level
 	e.userRolesMu.RLock()
@@ -6808,6 +6811,8 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 
 	if msg.SharedScope != "" {
 		switch cmdID {
+		case "queue", "cancel", "stop", "resume":
+			e.handleSharedControl(p, msg, cmdID, args)
 		case "new", "list", "switch", "name", "current":
 			e.handleSharedDirectory(p, msg, cmdID, args)
 		default:
