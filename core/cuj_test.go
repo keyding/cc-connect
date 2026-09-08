@@ -2808,3 +2808,78 @@ func TestCUJ_B15_SharedQueueSelectionModesAndConcurrentStart(t *testing.T) {
 		})
 	}
 }
+
+// An old answer targets only this request: selection, rename and restart do not
+// change its identity. Both personal and common topic defaults use this journey.
+func TestCUJ_B18_ReplyOldAnswerPreservesDefaultAndRestart(t *testing.T) {
+	for _, common := range []bool{false, true} {
+		t.Run(fmt.Sprint(common), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "sessions")
+			a := &queueTestAgent{dir: t.TempDir(), calls: make(chan *queueTestSession, 20)}
+			p := &linkTestPlatform{queueTestPlatform: queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}}
+			e := NewEngine("project", a, []Platform{p}, path, LangEnglish)
+			t.Cleanup(func() { _ = e.Stop() })
+			send := func(user, id, text string, ref *MessageReference) {
+				entry := "topic:" + user
+				if common {
+					entry = "topic"
+				}
+				e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: entry, UserID: user, MessageID: id, Content: text, ReplyCtx: user, BotReply: ref})
+			}
+			complete := func(answer, wantResume string) {
+				s := nextQueueSession(t, a)
+				if s.resume != wantResume {
+					t.Fatalf("agent resumed %q, want %q", s.resume, wantResume)
+				}
+				<-s.sent
+				s.events <- Event{Type: EventResult, Done: true, Content: answer}
+			}
+			send("alice", "1", "/new Alpha", nil)
+			send("alice", "2", "first", nil)
+			complete("alpha answer", "")
+			waitQueue(t, func() bool { return p.receiptCount() == 1 })
+			ref := &MessageReference{Scope: "group", MessageID: "bot-1"}
+			send("alice", "3", "/name Renamed", nil)
+			send("alice", "4", "/new Beta", nil)
+			if !common {
+				send("bob", "5", "/switch Beta", nil)
+			}
+			send("bob", "6", "old answer followup", ref)
+			complete("old followup done", "history-one")
+			waitQueue(t, func() bool { return p.receiptCount() == 2 })
+			send("bob", "7", "ordinary", nil)
+			complete("ordinary done", "")
+			waitQueue(t, func() bool { return p.receiptCount() == 3 })
+			got := strings.Join(p.getSent(), "\n")
+			if !strings.Contains(got, "Saved for Renamed") || !strings.Contains(got, "Saved for Beta") {
+				t.Fatal(got)
+			}
+			p.muTargets.Lock()
+			targets := strings.Join(p.targets, "\n")
+			p.muTargets.Unlock()
+			if !strings.Contains(targets, "bob:old followup done") {
+				t.Fatal(targets)
+			}
+			if err := e.Stop(); err != nil {
+				t.Fatal(err)
+			}
+			e = NewEngine("project", a, []Platform{p}, path, LangEnglish)
+			send("bob", "8", "after restart", ref)
+			complete("restart answer", "history-one")
+			waitQueue(t, func() bool { return p.receiptCount() == 4 })
+			send("bob", "8", "duplicate edited", ref)
+			send("bob", "9", "missing", &MessageReference{Scope: "group", MessageID: "unknown"})
+			send("bob", "10", "wrong group", &MessageReference{Scope: "other", MessageID: "bot-1"})
+			noQueueSession(t, a)
+			got = strings.Join(p.getSent(), "\n")
+			if strings.Count(got, e.i18n.T(MsgSharedReplyUnavailable)) != 2 || strings.Count(got, "restart answer") != 1 {
+				t.Fatal(got)
+			}
+			// Commands retain their own default-target semantics even with a bad quote.
+			send("bob", "11", "/name Beta renamed", &MessageReference{})
+			if got := strings.Join(p.getSent(), "\n"); !strings.Contains(got, "Beta renamed") {
+				t.Fatal(got)
+			}
+		})
+	}
+}

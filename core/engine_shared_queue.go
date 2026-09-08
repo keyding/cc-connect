@@ -120,7 +120,13 @@ func (e *Engine) sharedReply(r sharedRequest, text string) {
 		}
 		target, err := codec.UnmarshalReplyContext(r.Reply)
 		if err == nil {
-			err = p.Reply(e.ctx, target, text)
+			if sender, ok := p.(ReceiptReplySender); ok {
+				err = sender.ReplyWithReceipt(e.ctx, target, text, func(ref MessageReference) error {
+					return e.sharedDirectory.recordMessage(e.name, r.Platform, r.Scope, r.Session.ID, ref)
+				})
+			} else {
+				err = p.Reply(e.ctx, target, text)
+			}
 		}
 		if err != nil {
 			slog.Error("shared result delivery failed", "request", r.ID, "error", err)

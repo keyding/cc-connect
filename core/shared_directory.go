@@ -26,6 +26,7 @@ type sharedScope struct {
 }
 
 type sharedDirectoryState struct {
+	Links   map[string]string      `json:"message_links,omitempty"`
 	Version int                    `json:"version"`
 	Scopes  map[string]sharedScope `json:"scopes"`
 }
@@ -127,7 +128,7 @@ func (d *sharedDirectory) apply(scopeKey, entry, agent, command, arg string) (sh
 	if hint, err := scope.change(entry, agent, command, arg); hint != "" || err != nil {
 		return scope, hint, err
 	}
-	next := sharedDirectoryState{Version: 1, Scopes: map[string]sharedScope{}}
+	next := sharedDirectoryState{Version: 1, Scopes: map[string]sharedScope{}, Links: d.state.Links}
 	for k, v := range d.state.Scopes {
 		next.Scopes[k] = v
 	}
