@@ -1,3 +1,5 @@
+.DEFAULT_GOAL := build
+
 APP        := cc-connect
 MODULE     := github.com/chenhg5/cc-connect
 CMD        := ./cmd/cc-connect
@@ -23,34 +25,32 @@ PLATFORMS := \
 # ---------------------------------------------------------------------------
 # Selective compilation via build tags.
 #
-# By default all agents and platforms are included. To build with only
-# specific ones, set AGENTS and/or PLATFORMS_INCLUDE:
-#
-#   make build AGENTS=claudecode PLATFORMS_INCLUDE=feishu,telegram
-#
-# You can also exclude specific ones:
-#
-#   make build EXCLUDE=discord,dingtalk,qq,qqbot,line
+# Default: Claude Code + Codex + Telegram, without the optional Web UI.
+# Restore adapters explicitly, e.g.:
+#   make build AGENTS=claudecode,codex,gemini PLATFORMS_INCLUDE=telegram
+#   make build AGENTS=all PLATFORMS_INCLUDE=all WITH_WEB=1
 # ---------------------------------------------------------------------------
 
-ALL_AGENTS    := acp antigravity claudecode codex copilot cursor devin gemini iflow kimi opencode pi qoder tmux
-ALL_PLATFORMS := feishu telegram discord slack dingtalk wecom weixin qq qqbot line weibo max matrix webex wps-agentspace tuitui
-ALL_AGENTS    := acp antigravity claudecode codex copilot cursor devin gemini iflow kimi opencode pi qoder reasonix tmux
-ALL_PLATFORMS := feishu telegram discord slack dingtalk wecom weixin qq qqbot line weibo max matrix webex cloud_web tuitui googlechat
-ALL_EXTRAS    := web
+AGENTS ?= claudecode,codex
+PLATFORMS_INCLUDE ?= telegram
+WITH_WEB ?= 0
+
+# Derive tag names from plugin filenames so new adapters cannot escape filtering.
+ALL_AGENTS := $(patsubst cmd/cc-connect/plugin_agent_%.go,%,$(wildcard cmd/cc-connect/plugin_agent_*.go))
+ALL_PLATFORMS := $(patsubst cmd/cc-connect/plugin_platform_%.go,%,$(wildcard cmd/cc-connect/plugin_platform_*.go))
 
 COMMA := ,
 
 # Compute exclusion tags from AGENTS / PLATFORMS_INCLUDE / EXCLUDE variables
-_EXCLUDE_TAGS :=
+_EXCLUDE_TAGS := full_plugins
 
-ifdef AGENTS
+ifneq ($(AGENTS),all)
   _WANTED_AGENTS := $(subst $(COMMA), ,$(AGENTS))
   _EXCLUDE_AGENTS := $(filter-out $(_WANTED_AGENTS),$(ALL_AGENTS))
   _EXCLUDE_TAGS += $(addprefix no_,$(_EXCLUDE_AGENTS))
 endif
 
-ifdef PLATFORMS_INCLUDE
+ifneq ($(PLATFORMS_INCLUDE),all)
   _WANTED_PLATFORMS := $(subst $(COMMA), ,$(PLATFORMS_INCLUDE))
   _EXCLUDE_PLATFORMS := $(filter-out $(_WANTED_PLATFORMS),$(ALL_PLATFORMS))
   _EXCLUDE_TAGS += $(addprefix no_,$(_EXCLUDE_PLATFORMS))
@@ -60,24 +60,27 @@ ifdef EXCLUDE
   _EXCLUDE_TAGS += $(addprefix no_,$(subst $(COMMA), ,$(EXCLUDE)))
 endif
 
-ifdef NO_WEB
-  _EXCLUDE_TAGS += no_web
+ifeq ($(WITH_WEB),1)
+  ifndef NO_WEB
+    _EXCLUDE_TAGS += with_web
+    WEB_PREREQ := web
+  endif
 endif
 
 _BUILD_TAGS := $(strip $(_EXCLUDE_TAGS) goolm)
 _TAGS_FLAG  := $(if $(_BUILD_TAGS),-tags '$(_BUILD_TAGS)',)
 
-.PHONY: build run clean test test-fast test-full test-smoke test-e2e test-release test-release-local test-performance pre-test lint release release-all web
+.PHONY: build build-noweb run clean test test-fast test-full test-smoke test-e2e test-release test-release-local test-performance pre-test lint release release-all web
 
 web:
 	@if [ ! -d web/node_modules ]; then cd web && npm install; fi
 	cd web && npm run build
 
-build: web
+build: $(WEB_PREREQ)
 	go build $(_TAGS_FLAG) -ldflags "$(LDFLAGS)" -o $(APP) $(CMD)
 
 build-noweb:
-	go build $(_TAGS_FLAG) -tags 'no_web' -ldflags "$(LDFLAGS)" -o $(APP) $(CMD)
+	$(MAKE) build NO_WEB=1
 
 run: build
 	./$(APP)
@@ -146,7 +149,7 @@ test:
 lint:
 	golangci-lint run ./...
 
-release-all: web clean
+release-all: $(WEB_PREREQ) clean
 	@mkdir -p $(DIST)
 	@$(foreach platform,$(PLATFORMS), \
 		$(eval GOOS   := $(word 1,$(subst /, ,$(platform)))) \
@@ -168,7 +171,7 @@ release-all: web clean
 	@cd $(DIST) && sha256sum * > checksums.txt
 	@echo "Done. Binaries and archives in $(DIST)/"
 
-release:
+release: $(WEB_PREREQ)
 	@if [ -z "$(TARGET)" ]; then \
 		echo "Usage: make release TARGET=linux/amd64"; \
 		echo "Available: $(PLATFORMS)"; \

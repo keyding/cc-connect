@@ -1,4 +1,4 @@
-//go:build !no_webex
+//go:build full_plugins && !no_webex
 
 package main
 

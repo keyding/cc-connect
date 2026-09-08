@@ -1,3 +1,5 @@
+> 本分支默认仅编译 **Telegram + Claude Code + Codex**。其他适配器需显式启用；请先阅读[本地构建说明](docs/local-build.md)。
+
 <p align="center">
   <img src="./docs/images/banner.svg" alt="CC-Connect Banner" width="800"/>
 </p>

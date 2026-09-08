@@ -1,4 +1,4 @@
-//go:build !no_matrix
+//go:build full_plugins && !no_matrix
 
 package main
 

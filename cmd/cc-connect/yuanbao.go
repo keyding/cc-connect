@@ -1,3 +1,5 @@
+//go:build full_plugins && !no_yuanbao
+
 package main
 
 import (

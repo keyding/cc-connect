@@ -1,4 +1,4 @@
-//go:build !no_cloud_web
+//go:build full_plugins && !no_cloud_web
 
 package main
 

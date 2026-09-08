@@ -1,4 +1,4 @@
-//go:build !no_antigravity
+//go:build full_plugins && !no_antigravity
 
 package main
 

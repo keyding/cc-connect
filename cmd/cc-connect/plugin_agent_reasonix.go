@@ -1,4 +1,4 @@
-//go:build !no_reasonix
+//go:build full_plugins && !no_reasonix
 
 package main
 

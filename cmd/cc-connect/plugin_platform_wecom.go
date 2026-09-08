@@ -1,4 +1,4 @@
-//go:build !no_wecom
+//go:build full_plugins && !no_wecom
 
 package main
 

@@ -1,4 +1,4 @@
-//go:build !no_feishu
+//go:build full_plugins && !no_feishu
 
 package main
 

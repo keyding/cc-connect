@@ -1,4 +1,4 @@
-//go:build !no_wps_agentspace
+//go:build full_plugins && !no_wps_agentspace
 
 package main
 

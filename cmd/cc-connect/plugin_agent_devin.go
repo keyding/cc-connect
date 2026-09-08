@@ -1,4 +1,4 @@
-//go:build !no_devin
+//go:build full_plugins && !no_devin
 
 package main
 

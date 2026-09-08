@@ -1,4 +1,4 @@
-//go:build !no_googlechat
+//go:build full_plugins && !no_googlechat
 
 package main
 

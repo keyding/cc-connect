@@ -1,4 +1,4 @@
-//go:build !no_acp
+//go:build full_plugins && !no_acp
 
 package main
 

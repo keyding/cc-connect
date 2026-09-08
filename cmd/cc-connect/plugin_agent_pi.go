@@ -1,4 +1,4 @@
-//go:build !no_pi
+//go:build full_plugins && !no_pi
 
 package main
 

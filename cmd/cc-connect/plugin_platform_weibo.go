@@ -1,4 +1,4 @@
-//go:build !no_weibo
+//go:build full_plugins && !no_weibo
 
 package main
 
