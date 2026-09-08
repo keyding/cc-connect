@@ -483,6 +483,7 @@ type Engine struct {
 	platformLifecycleMu sync.Mutex
 	platformReady       map[Platform]bool
 	stopping            bool
+	messageWork         sync.WaitGroup // admitted handlers, turns and unsolicited readers
 	replyFooterMu       sync.Mutex
 	replyFooterUsage    replyFooterUsageCache
 
@@ -1460,6 +1461,11 @@ func (e *Engine) ActiveSessionKeys() []string {
 // It finds the platform that owns the session key, reconstructs a reply context,
 // and processes the message as if the user sent it.
 func (e *Engine) ExecuteCronJob(job *CronJob) error {
+	if !e.beginMessageWork() {
+		return context.Canceled
+	}
+	defer e.messageWork.Done()
+
 	e.hooks.Emit(HookEvent{
 		Event:      HookEventCronTriggered,
 		SessionKey: job.SessionKey,
@@ -1668,6 +1674,11 @@ func (e *Engine) ExecuteCronJob(job *CronJob) error {
 // notification (unless muted), and either runs a shell command or injects a
 // synthetic message into the agent session.
 func (e *Engine) ExecuteTimerJob(job *TimerJob) error {
+	if !e.beginMessageWork() {
+		return context.Canceled
+	}
+	defer e.messageWork.Done()
+
 	e.hooks.Emit(HookEvent{
 		Event:      HookEventTimerTriggered,
 		SessionKey: job.SessionKey,
@@ -2247,6 +2258,11 @@ func (e *Engine) finishCronShell(p Platform, replyCtx any, cmd *exec.Cmd, mu *sy
 // ExecuteHeartbeat runs a heartbeat check by injecting a synthetic message
 // into the main session, similar to cron but designed for periodic awareness.
 func (e *Engine) ExecuteHeartbeat(sessionKey, prompt string, silent bool) error {
+	if !e.beginMessageWork() {
+		return context.Canceled
+	}
+	defer e.messageWork.Done()
+
 	platformName := ""
 	if idx := strings.Index(sessionKey, ":"); idx > 0 {
 		platformName = sessionKey[:idx]
@@ -2400,6 +2416,9 @@ func (e *Engine) Stop() error {
 	if err := e.agent.Stop(); err != nil {
 		errs = append(errs, fmt.Errorf("stop agent %s: %w", e.agent.Name(), err))
 	}
+	// Cancellation and adapter teardown unblock active turns. Wait for their
+	// final history writes before callers release the session store.
+	e.messageWork.Wait()
 	if len(errs) > 0 {
 		return fmt.Errorf("engine stop errors: %v", errs)
 	}
@@ -2418,6 +2437,29 @@ func (e *Engine) OnPlatformUnavailable(p Platform, err error) {
 		return
 	}
 	slog.Warn("platform unavailable", "project", e.name, "platform", p.Name(), "error", err)
+}
+
+// beginMessageWork serializes admission with Stop so Wait cannot miss a
+// goroutine that has been accepted but has not started executing yet.
+func (e *Engine) beginMessageWork() bool {
+	e.platformLifecycleMu.Lock()
+	defer e.platformLifecycleMu.Unlock()
+	if e.stopping || (e.ctx != nil && e.ctx.Err() != nil) {
+		return false
+	}
+	e.messageWork.Add(1)
+	return true
+}
+
+func (e *Engine) startMessageWork(fn func()) bool {
+	if !e.beginMessageWork() {
+		return false
+	}
+	go func() {
+		defer e.messageWork.Done()
+		fn()
+	}()
+	return true
 }
 
 // ReceiveMessage delivers a message from a platform to the engine.
@@ -2811,6 +2853,11 @@ func (e *Engine) startMessageRecallMonitor(sessionKey string) context.CancelFunc
 }
 
 func (e *Engine) handleMessage(p Platform, msg *Message) {
+	if !e.beginMessageWork() {
+		return
+	}
+	defer e.messageWork.Done()
+
 	if msg.Recalled {
 		e.handleMessageRecall(p, msg)
 		return
@@ -3052,7 +3099,9 @@ func (e *Engine) handleMessage(p Platform, msg *Message) {
 			// and the queue append. Re-try TryLock — if it succeeds, no one is
 			// draining the queue so we must start a processor ourselves.
 			if session.TryLock() {
-				go e.drainOrphanedQueue(session, sessions, interactiveKey, agent, resolvedWorkspace)
+				if !e.startMessageWork(func() { e.drainOrphanedQueue(session, sessions, interactiveKey, agent, resolvedWorkspace) }) {
+					session.Unlock()
+				}
 			}
 			return
 		}
@@ -3091,7 +3140,11 @@ sessionLocked:
 		"session", session.ID,
 	)
 
-	go e.processInteractiveMessageWith(p, msg, session, agent, sessions, interactiveKey, resolvedWorkspace, msg.SessionKey)
+	if !e.startMessageWork(func() {
+		e.processInteractiveMessageWith(p, msg, session, agent, sessions, interactiveKey, resolvedWorkspace, msg.SessionKey)
+	}) {
+		session.Unlock()
+	}
 }
 
 func runMessageAccepted(msg *Message) {
@@ -4738,7 +4791,12 @@ func (e *Engine) startUnsolicitedReader(state *interactiveState, session *Sessio
 	state.unsolicitedDone = done
 	state.mu.Unlock()
 
-	go e.runUnsolicitedReader(ctx, cancel, done, state, agentSession, session, sessions, sessionKey, workspaceDir)
+	if !e.startMessageWork(func() {
+		e.runUnsolicitedReader(ctx, cancel, done, state, agentSession, session, sessions, sessionKey, workspaceDir)
+	}) {
+		cancel()
+		close(done)
+	}
 }
 
 // runUnsolicitedReader is the goroutine body for the unsolicited event reader.
@@ -14777,7 +14835,11 @@ func (e *Engine) executeCustomCommand(p Platform, msg *Message, cmd *CustomComma
 	)
 
 	msg.Content = prompt
-	go e.processInteractiveMessageWith(p, msg, session, agent, sessions, interactiveKey, workspaceDir, msg.SessionKey)
+	if !e.startMessageWork(func() {
+		e.processInteractiveMessageWith(p, msg, session, agent, sessions, interactiveKey, workspaceDir, msg.SessionKey)
+	}) {
+		session.Unlock()
+	}
 }
 
 // executeShellCommand runs a shell command and sends the output to the user.
@@ -15005,7 +15067,11 @@ func (e *Engine) executeSkill(p Platform, msg *Message, skill *Skill, args []str
 	)
 
 	msg.Content = prompt
-	go e.processInteractiveMessageWith(p, msg, session, agent, sessions, interactiveKey, workspaceDir, msg.SessionKey)
+	if !e.startMessageWork(func() {
+		e.processInteractiveMessageWith(p, msg, session, agent, sessions, interactiveKey, workspaceDir, msg.SessionKey)
+	}) {
+		session.Unlock()
+	}
 }
 
 func (e *Engine) cmdSkills(p Platform, msg *Message) {
