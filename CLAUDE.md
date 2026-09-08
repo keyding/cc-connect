@@ -235,3 +235,19 @@ Available tags: `no_acp`, `no_claudecode`, `no_codex`, `no_cursor`, `no_gemini`,
 6. Optionally implement `AgentDoctorInfo` for `cc-connect doctor` support
 7. Add config example in `config.example.toml`
 8. Add unit tests
+
+## Agent skills
+
+### Issue tracker
+
+处理需求、规格、决策地图和任务时，使用 GitHub Issues。
+先读 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+分诊时使用五个标准标签，映射见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+采用单领域结构。探索代码及讨论领域概念前，
+按 `docs/agents/domain.md` 读取术语和相关 ADR。
