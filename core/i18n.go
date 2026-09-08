@@ -698,7 +698,83 @@ const (
 	MsgAgentRelayToolPrompt MsgKey = "agent_relay_tool_prompt"
 )
 
+const (
+	MsgSharedChoose           MsgKey = "shared_sharedchoose"
+	MsgSharedList             MsgKey = "shared_sharedlist"
+	MsgSharedCurrent          MsgKey = "shared_sharedcurrent"
+	MsgSharedNameConflict     MsgKey = "shared_sharednameconflict"
+	MsgSharedNotFound         MsgKey = "shared_sharednotfound"
+	MsgSharedNameUsage        MsgKey = "shared_sharednameusage"
+	MsgSharedUnavailable      MsgKey = "shared_sharedunavailable"
+	MsgSharedExecutionPending MsgKey = "shared_sharedexecutionpending"
+	MsgSharedCommands         MsgKey = "shared_sharedcommands"
+)
+
 var messages = map[MsgKey]map[Language]string{
+	MsgSharedChoose: {
+		LangEnglish:            "No session selected. Use /new [name] or /list and /switch <number, name or ID>, then resend your task.",
+		LangChinese:            "未选择会话。请用 /new [名称] 创建，或 /list 后 /switch <序号、名称或 ID> 选择，再重新发送任务。",
+		LangTraditionalChinese: "未選擇會話。請用 /new [名稱] 建立，或 /list 後 /switch <序號、名稱或 ID> 選擇，再重新傳送任務。",
+		LangJapanese:           "会話が未選択です。/new [名前] または /list と /switch <番号・名前・ID> で選択し、タスクを再送してください。",
+		LangSpanish:            "No hay sesión seleccionada. Usa /new [nombre] o /list y /switch <número, nombre o ID>, y vuelve a enviar la tarea.",
+	},
+	MsgSharedList: {
+		LangEnglish:            "Shared sessions (pending; * = current):",
+		LangChinese:            "共享会话（待开始；* 为当前选择）：",
+		LangTraditionalChinese: "共享會話（待開始；* 為目前選擇）：",
+		LangJapanese:           "共有会話（開始待ち；* は現在の選択）：",
+		LangSpanish:            "Sesiones compartidas (pendientes; * = actual):",
+	},
+	MsgSharedCurrent: {
+		LangEnglish:            "Current: %s [%s] (%s)",
+		LangChinese:            "当前选择：%s [%s] (%s)",
+		LangTraditionalChinese: "目前選擇：%s [%s] (%s)",
+		LangJapanese:           "現在の選択：%s [%s] (%s)",
+		LangSpanish:            "Actual: %s [%s] (%s)",
+	},
+	MsgSharedNameConflict: {
+		LangEnglish:            "That name already exists. Choose another name; your selection has not changed.",
+		LangChinese:            "名称已存在，请使用其他名称；当前选择未改变。",
+		LangTraditionalChinese: "名稱已存在，請使用其他名稱；目前選擇未改變。",
+		LangJapanese:           "その名前は既に存在します。別の名前を指定してください。選択は変更されていません。",
+		LangSpanish:            "Ese nombre ya existe. Elige otro; la selección no ha cambiado.",
+	},
+	MsgSharedNotFound: {
+		LangEnglish:            "Session not found. Use /list, then /switch <number, name or ID>.",
+		LangChinese:            "未找到会话，请 /list 后用 /switch <序号、名称或 ID>。",
+		LangTraditionalChinese: "找不到會話，請 /list 後用 /switch <序號、名稱或 ID>。",
+		LangJapanese:           "会話が見つかりません。/list の後に /switch <番号・名前・ID> を使ってください。",
+		LangSpanish:            "Sesión no encontrada. Usa /list y /switch <número, nombre o ID>.",
+	},
+	MsgSharedNameUsage: {
+		LangEnglish:            "Use /name <new name> to rename the selected session.",
+		LangChinese:            "使用 /name <新名称> 重命名当前会话。",
+		LangTraditionalChinese: "使用 /name <新名稱> 重新命名目前會話。",
+		LangJapanese:           "/name <新しい名前> で選択した会話の名前を変更します。",
+		LangSpanish:            "Usa /name <nuevo nombre> para renombrar la sesión seleccionada.",
+	},
+	MsgSharedUnavailable: {
+		LangEnglish:            "Shared directory unavailable. No change or task was accepted.",
+		LangChinese:            "共享目录不可用，未接受更改或任务。",
+		LangTraditionalChinese: "共享目錄無法使用，未接受變更或任務。",
+		LangJapanese:           "共有ディレクトリを利用できません。変更やタスクは受け付けていません。",
+		LangSpanish:            "El directorio no está disponible. No se aceptaron cambios ni tareas.",
+	},
+	MsgSharedExecutionPending: {
+		LangEnglish:            "Shared execution is not available in this directory preview. This task was not accepted or saved.",
+		LangChinese:            "目录试用阶段尚未开放共享执行，本次任务未接收或保存。",
+		LangTraditionalChinese: "目錄試用階段尚未開放共享執行，本次任務未接收或儲存。",
+		LangJapanese:           "このディレクトリの試用版では共有実行は未対応です。タスクは受け付けも保存もされていません。",
+		LangSpanish:            "La ejecución compartida no está disponible en esta vista previa. La tarea no se aceptó ni guardó.",
+	},
+	MsgSharedCommands: {
+		LangEnglish:            "Directory preview supports /new, /list, /switch, /name and /current.",
+		LangChinese:            "目录试用支持 /new、/list、/switch、/name 和 /current。",
+		LangTraditionalChinese: "目錄試用支援 /new、/list、/switch、/name 和 /current。",
+		LangJapanese:           "ディレクトリの試用版は /new、/list、/switch、/name、/current に対応しています。",
+		LangSpanish:            "La vista previa admite /new, /list, /switch, /name y /current.",
+	},
+
 	MsgStarting: {
 		LangEnglish:            "⏳ Processing...",
 		LangChinese:            "⏳ 处理中...",

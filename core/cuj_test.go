@@ -2466,3 +2466,293 @@ func TestCUJ_H4_FeishuTopicsKeepWorkspaceBindingsIsolated(t *testing.T) {
 		t.Fatalf("topic B changed after topic A unbind: %q", got)
 	}
 }
+
+// Shared directory CUJs exercise the agreed public message boundary.
+func TestCUJ_B14_SharedDirectoryAcrossTopicsAndRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	p := &stubPlatformEngine{n: "test"}
+	makeEngine := func() *Engine {
+		e := NewEngine("project", &cujAgent{}, []Platform{p}, path, LangEnglish)
+		t.Cleanup(func() { _ = e.Stop() })
+		return e
+	}
+	e := makeEngine()
+	send := func(user, topic, content string) string {
+		t.Helper()
+		before := len(p.getSent())
+		e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: "test:group:" + topic + ":" + user, UserID: user, Content: content})
+		sent := p.getSent()
+		if len(sent) <= before {
+			t.Fatal("no reply")
+		}
+		return strings.Join(sent[before:], "\n")
+	}
+	if got := send("alice", "one", "unselected task"); !strings.Contains(got, "/new") {
+		t.Fatalf("empty selection: %s", got)
+	}
+	if got := send("alice", "one", "/new Alpha"); !strings.Contains(got, "Alpha") {
+		t.Fatal(got)
+	}
+	if got := send("bob", "two", "/list"); !strings.Contains(got, "1. Alpha") {
+		t.Fatal(got)
+	}
+	if got := send("bob", "two", "/switch 1"); !strings.Contains(got, "Alpha") {
+		t.Fatal(got)
+	}
+	if got := send("bob", "two", "/name Beta"); !strings.Contains(got, "Beta") {
+		t.Fatal(got)
+	}
+	if got := send("alice", "one", "/current"); !strings.Contains(got, "Beta") {
+		t.Fatal(got)
+	}
+	if err := e.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	e = makeEngine()
+	if got := send("alice", "one", "/current"); !strings.Contains(got, "Beta") {
+		t.Fatal(got)
+	}
+	if got := send("bob", "two", "/current"); !strings.Contains(got, "Beta") {
+		t.Fatal(got)
+	}
+	if got := send("bob", "one", "/current"); !strings.Contains(got, "/new") {
+		t.Fatal(got)
+	}
+}
+
+func TestCUJ_B14_SharedSelectionModesAndIsolation(t *testing.T) {
+	for _, common := range []bool{false, true} {
+		t.Run(fmt.Sprint(common), func(t *testing.T) {
+			p := &stubPlatformEngine{n: "test"}
+			path := filepath.Join(t.TempDir(), "sessions.json")
+			agent := &cujAgent{}
+			e := NewEngine("project", agent, []Platform{p}, path, LangEnglish)
+			t.Cleanup(func() { _ = e.Stop() })
+			send := func(user, topic, group, content string) string {
+				t.Helper()
+				key := "test:" + group + ":" + topic
+				if !common {
+					key += ":" + user
+				}
+				before := len(p.getSent())
+				e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: group, SessionKey: key, UserID: user, Content: content})
+				return strings.Join(p.getSent()[before:], "\n")
+			}
+			first := send("alice", "one", "group", "/new Alpha")
+			if !strings.Contains(first, "Alpha") {
+				t.Fatal(first)
+			}
+			id := first[strings.LastIndex(first, "(")+1 : strings.LastIndex(first, ")")]
+			send("bob", "two", "group", "/switch 1")
+			send("alice", "one", "group", "/new Beta")
+			expected := "/new"
+			if common {
+				expected = "Beta"
+			}
+			if got := send("bob", "one", "group", "ordinary task"); !strings.Contains(got, expected) {
+				t.Fatal(got)
+			}
+			if got := send("bob", "two", "group", "/current"); !strings.Contains(got, "Alpha") {
+				t.Fatal(got)
+			}
+			if got := send("alice", "two", "group", "/switch "+id); !strings.Contains(got, "Alpha") {
+				t.Fatal(got)
+			}
+			if got := send("alice", "two", "group", "/name Renamed"); !strings.Contains(got, id) {
+				t.Fatalf("identity changed: %s", got)
+			}
+			if got := send("bob", "two", "group", "/current"); !strings.Contains(got, "Renamed") || !strings.Contains(got, id) {
+				t.Fatal(got)
+			}
+			if got := send("bob", "", "other-group", "/list"); strings.Contains(got, "Renamed") || strings.Contains(got, "Beta") {
+				t.Fatal(got)
+			}
+			if got := send("bob", "", "other-group", "/switch "+id); !strings.Contains(got, "not found") {
+				t.Fatal(got)
+			}
+			if got := send("bob", "", "group", "/current"); !strings.Contains(got, "/new") {
+				t.Fatal(got)
+			}
+			send("alice", "", "group", "/new Lobby")
+			expected = "/new"
+			if common {
+				expected = "Lobby"
+			}
+			if got := send("bob", "", "group", "/current"); !strings.Contains(got, expected) {
+				t.Fatal(got)
+			}
+			other := NewEngine("other-project", agent, []Platform{p}, path, LangEnglish)
+			t.Cleanup(func() { _ = other.Stop() })
+			before := len(p.getSent())
+			other.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: "same", UserID: "bob", Content: "/list"})
+			if got := strings.Join(p.getSent()[before:], "\n"); strings.Contains(got, "Renamed") {
+				t.Fatal(got)
+			}
+			agent.mu.Lock()
+			started := agent.nextID
+			agent.mu.Unlock()
+			if started != 0 {
+				t.Fatalf("preview executed %d tasks", started)
+			}
+		})
+	}
+}
+
+func TestCUJ_B14_SharedNamesAreAtomic(t *testing.T) {
+	p := &stubPlatformEngine{n: "test"}
+	e := NewEngine("project", &cujAgent{}, []Platform{p}, filepath.Join(t.TempDir(), "sessions.json"), LangEnglish)
+	t.Cleanup(func() { _ = e.Stop() })
+	send := func(user, content string) {
+		e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: "test:group:" + user, UserID: user, Content: content})
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 12; i++ {
+		wg.Add(1)
+		go func(i int) { defer wg.Done(); send(fmt.Sprint(i), "/new   ALpha  ") }(i)
+	}
+	wg.Wait()
+	if got := strings.Count(strings.Join(p.getSent(), "\n"), "already exists"); got != 11 {
+		t.Fatalf("conflicts = %d, want 11", got)
+	}
+	send("bob", "/new Beta")
+	before := len(p.getSent())
+	send("bob", "/name alpha")
+	send("bob", "/current")
+	got := strings.Join(p.getSent()[before:], "\n")
+	if !strings.Contains(got, "already exists") || !strings.Contains(got, "Current: Beta") {
+		t.Fatal(got)
+	}
+	send("bob", "/new")
+	send("alice", "/new")
+	before = len(p.getSent())
+	send("alice", "/list")
+	got = strings.Join(p.getSent()[before:], "\n")
+	for _, want := range []string{"1. ALpha", "2. Beta", "3. session-3", "4. session-4"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %s: %s", want, got)
+		}
+	}
+	before = len(p.getSent())
+	send("bob", "/switch 1")
+	send("bob", "/name Gamma")
+	send("alice", "/switch 2")
+	got = strings.Join(p.getSent()[before:], "\n")
+	if !strings.Contains(got, "Current: ALpha") || !strings.Contains(got, "Current: Beta") {
+		t.Fatal(got)
+	}
+}
+
+func TestCUJ_B14_SharedDirectoryWriteFailureDoesNotChangeSelection(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	path := filepath.Join(dir, "sessions.json")
+	p := &stubPlatformEngine{n: "test"}
+	e := NewEngine("project", &cujAgent{}, []Platform{p}, path, LangEnglish)
+	t.Cleanup(func() { _ = e.Stop() })
+	send := func(content string) string {
+		before := len(p.getSent())
+		e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: "entry", UserID: "alice", Content: content})
+		return strings.Join(p.getSent()[before:], "\n")
+	}
+	send("/new Alpha")
+	if err := os.Rename(dir, dir+"-saved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir, []byte("unavailable directory"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got := send("/new Beta"); !strings.Contains(got, "unavailable") {
+		t.Fatal(got)
+	}
+	if got := send("/current"); !strings.Contains(got, "Alpha") {
+		t.Fatal(got)
+	}
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(dir+"-saved", dir); err != nil {
+		t.Fatal(err)
+	}
+	if got := send("/list"); strings.Contains(got, "Beta") {
+		t.Fatal(got)
+	}
+	if got := send("/new Beta"); !strings.Contains(got, "Current: Beta") {
+		t.Fatal(got)
+	}
+}
+
+func TestCUJ_B14_ConcurrentRenamePreservesOtherSession(t *testing.T) {
+	p := &stubPlatformEngine{n: "test"}
+	e := NewEngine("project", &cujAgent{}, []Platform{p}, filepath.Join(t.TempDir(), "sessions.json"), LangEnglish)
+	t.Cleanup(func() { _ = e.Stop() })
+	send := func(user, content string) {
+		e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: user, UserID: user, Content: content})
+	}
+	send("alice", "/new Alpha")
+	send("bob", "/new Beta")
+	before := len(p.getSent())
+	var wg sync.WaitGroup
+	for _, user := range []string{"alice", "bob"} {
+		wg.Add(1)
+		go func(user string) { defer wg.Done(); send(user, "/name Common") }(user)
+	}
+	wg.Wait()
+	if got := strings.Count(strings.Join(p.getSent()[before:], "\n"), "already exists"); got != 1 {
+		t.Fatalf("rename conflicts: %d", got)
+	}
+	before = len(p.getSent())
+	send("alice", "/list")
+	got := strings.Join(p.getSent()[before:], "\n")
+	if strings.Count(got, "Common") != 1 || (!strings.Contains(got, "Alpha") && !strings.Contains(got, "Beta")) {
+		t.Fatal(got)
+	}
+}
+
+type sharedDirectoryHistoryAgent struct {
+	cujAgent
+	listCalls int
+}
+
+func (a *sharedDirectoryHistoryAgent) ListSessions(context.Context) ([]AgentSessionInfo, error) {
+	a.listCalls++
+	return []AgentSessionInfo{{ID: "external-history", Summary: "Private unrelated history"}}, nil
+}
+
+func TestCUJ_B14_FreshDirectoryDoesNotImportAgentHistory(t *testing.T) {
+	oldDir := t.TempDir()
+	oldPath := filepath.Join(oldDir, "sessions.json")
+	p := &stubPlatformEngine{n: "test"}
+	old := NewEngine("project", &cujAgent{}, []Platform{p}, oldPath, LangEnglish)
+	old.ReceiveMessage(p, &Message{Platform: "test", SessionKey: "old-entry", UserID: "alice", Content: "/new Legacy work"})
+	if err := old.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile(oldPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := &sharedDirectoryHistoryAgent{}
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	e := NewEngine("project", agent, []Platform{p}, path, LangEnglish)
+	t.Cleanup(func() { _ = e.Stop() })
+	send := func(content string) string {
+		before := len(p.getSent())
+		e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: "entry", UserID: "alice", Content: content})
+		return strings.Join(p.getSent()[before:], "\n")
+	}
+	if got := send("/list"); strings.Contains(got, "Private") {
+		t.Fatal(got)
+	}
+	if got := send("/switch external-history"); !strings.Contains(got, "not found") {
+		t.Fatal(got)
+	}
+	send("/history")
+	send("/delete external-history")
+	send("/new New work")
+	send("/list")
+	if agent.listCalls != 0 {
+		t.Fatalf("read unregistered history %d times", agent.listCalls)
+	}
+	if got, err := os.ReadFile(oldPath); err != nil || string(got) != string(original) {
+		t.Fatalf("old state changed: %q %v", got, err)
+	}
+}
