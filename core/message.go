@@ -408,6 +408,8 @@ type Message struct {
 	// SharedScope is an explicit platform group identity for the opt-in shared directory.
 	// SessionKey remains the personal or common default-selection entry.
 	SharedScope string
+	// AttachmentError reports a platform download failure before durable admission.
+	AttachmentError error
 
 	SessionKey   string // unique key for user context, e.g. "feishu:{chatID}:{userID}"
 	Platform     string

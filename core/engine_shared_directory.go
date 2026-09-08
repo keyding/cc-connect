@@ -40,7 +40,8 @@ func (e *Engine) handleSharedDirectory(p Platform, msg *Message, command string,
 		if s.ID == scope.Selections[msg.SessionKey] {
 			text := e.i18n.Tf(MsgSharedCurrent, s.Name, s.AgentType, s.ID)
 			if command == "" {
-				text += "\n" + e.i18n.T(MsgSharedExecutionPending)
+				e.acceptSharedRequest(p, msg, s)
+				return
 			}
 			e.reply(p, msg.ReplyCtx, text)
 			return

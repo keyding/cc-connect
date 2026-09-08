@@ -1386,3 +1386,12 @@ func filterEnv(env []string, key string) []string {
 	}
 	return out
 }
+
+func (cs *claudeSession) WaitForExit(ctx context.Context) error {
+	select {
+	case <-cs.done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("claudecode: wait for executor exit: %w", ctx.Err())
+	}
+}

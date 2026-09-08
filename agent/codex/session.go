@@ -1001,3 +1001,14 @@ func truncate(s string, maxRunes int) string {
 	}
 	return string([]rune(s)[:maxRunes]) + "..."
 }
+
+func (cs *codexSession) WaitForExit(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() { cs.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("codex: wait for executor exit: %w", ctx.Err())
+	}
+}

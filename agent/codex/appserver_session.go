@@ -1745,3 +1745,20 @@ func (s *appServerSession) writeJSON(v any) error {
 	}
 	return nil
 }
+
+func (s *appServerSession) WaitForExit(ctx context.Context) error {
+	s.procMu.Lock()
+	local := s.cmd != nil
+	s.procMu.Unlock()
+	if !local {
+		return fmt.Errorf("codex: remote executor exit cannot be confirmed")
+	}
+	done := make(chan struct{})
+	go func() { s.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("codex: wait for app-server exit: %w", ctx.Err())
+	}
+}
