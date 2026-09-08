@@ -24,7 +24,7 @@ PRs as a request surface: no.
 技能要求“发布到 tracker”时，创建或更新 GitHub Issue。
 .scratch/ 可保留草稿和研究附件。
 
-已有本地地图尚未迁移。迁移时保留标题、状态、研究结果、
+本地地图迁移时保留标题、状态、研究结果、
 父子关系与依赖，并在本地文件记录 GitHub 链接；
 迁移后以 GitHub Issue 为准，避免两处独立维护状态。
 
