@@ -58,7 +58,7 @@ func (a *mediaLinkAgent) StartSessionWithEnv(ctx context.Context, id string, env
 		return nil, fmt.Errorf("no immutable media destination")
 	}
 	a.outputKeys <- key
-	return a.queueTestAgent.StartSession(ctx, id)
+	return a.StartSession(ctx, id)
 }
 
 func TestSharedOutput_PartialMediaAndSilentReplyDoNotReplay(t *testing.T) {
