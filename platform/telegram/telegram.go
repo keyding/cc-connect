@@ -601,6 +601,7 @@ func (p *Platform) sharedScope(chat models.Chat) string {
 
 func (p *Platform) dispatchMessage(msg *core.Message, tgMsg *models.Message) {
 	msg.SharedScope = p.sharedScope(tgMsg.Chat)
+	msg.BotReply = p.replyReference(tgMsg)
 	// Enrich with platform-specific context (reply quotes, location text, etc.)
 	var extras []string
 	if replyText := enrichReplyContent(tgMsg); replyText != "" {

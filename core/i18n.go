@@ -699,6 +699,7 @@ const (
 )
 
 const (
+	MsgSharedReplyUnavailable MsgKey = "shared_reply_unavailable"
 	MsgSharedNotAccepted      MsgKey = "MsgSharedNotAccepted"
 	MsgSharedQueued           MsgKey = "MsgSharedQueued"
 	MsgSharedPaused           MsgKey = "MsgSharedPaused"
@@ -716,6 +717,13 @@ const (
 )
 
 var messages = map[MsgKey]map[Language]string{
+	MsgSharedReplyUnavailable: {
+		LangEnglish:            "This reply cannot be linked to an accessible session. Select a session and send again.",
+		LangChinese:            "无法确认此回复所属的可访问会话。请选择会话后重新发送。",
+		LangTraditionalChinese: "無法確認此回覆所屬的可存取會話。請選擇會話後重新傳送。",
+		LangJapanese:           "この返信の会話を確認できないか、アクセスできません。会話を選択して再送してください。",
+		LangSpanish:            "No se puede vincular esta respuesta a una sesión accesible. Selecciona una sesión y vuelve a enviar.",
+	},
 	MsgSharedNotAccepted: {
 		LangEnglish:            "Task not accepted: request, attachments or reply destination could not be saved.",
 		LangChinese:            "任务未接收：请求、附件或回复位置未能保存。",

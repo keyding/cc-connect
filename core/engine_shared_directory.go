@@ -10,6 +10,10 @@ import (
 // This independently verifiable directory slice must not fall through to the
 // legacy entry-keyed executor or expose unregistered agent history.
 func (e *Engine) handleSharedDirectory(p Platform, msg *Message, command string, args []string) {
+	if command == "" && msg.BotReply != nil {
+		e.routeSharedReply(p, msg)
+		return
+	}
 	key, _ := json.Marshal([]string{e.name, msg.Platform, msg.SharedScope}) // strings always encode
 	scope, hint, err := e.sharedDirectory.apply(string(key), msg.SessionKey, e.agent.Name(), command, strings.Join(args, " "))
 	if err != nil {
