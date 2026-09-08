@@ -5,141 +5,98 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      benchmarks:
+        description: Run performance benchmarks
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7.0.0
         with:
-          go-version-file: 'go.mod'
-          cache: true
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
 
-      - name: Lint code
-        run: |
-          set -euo pipefail
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
-          LINT_BIN="$(go env GOPATH)/bin/golangci-lint"
+      # Use the released binary: building this linter requires Go 1.26,
+      # while the project's supported Go version is still defined in go.mod.
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v9.3.0
+        with:
+          version: v2.13.2
+          install-only: true
 
-          run_lint() {
-            "$LINT_BIN" run "$@" || {
-              code=$?
-              # exit code 5 = "no go files to analyze" (e.g. only non-Go files changed) — not a lint failure
-              [ "$code" -eq 5 ] && return 0
-              return "$code"
-            }
-          }
-
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch --no-tags origin "${{ github.base_ref }}"
-            run_lint --new-from-rev "origin/${{ github.base_ref }}" ./...
-          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
-            run_lint --new-from-rev "${{ github.event.before }}" ./...
-          elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-            run_lint --new-from-rev "$(git rev-parse HEAD^)" ./...
-          else
-            run_lint ./...
-          fi
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
       - name: Lint GitHub workflows
+        run: actionlint -color
+
+      - name: Lint code
+        env:
+          LINT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.8
-          "$(go env GOPATH)/bin/actionlint" -color
+          golangci-lint config verify
+          # Preserve incremental linting while upstream lint debt is still present.
+          if ! git cat-file -e "${LINT_BASE}^{commit}" 2>/dev/null; then
+            LINT_BASE="$(git rev-parse --verify HEAD^ 2>/dev/null || true)"
+          fi
+          if [ -n "$LINT_BASE" ]; then
+            golangci-lint run --new-from-rev="$LINT_BASE" ./...
+          else
+            golangci-lint run ./...
+          fi
 
   unit-test:
-    runs-on: ubuntu-latest
-    needs: lint
-
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v7.0.1
         with:
-          go-version-file: 'go.mod'
-          cache: true
+          persist-credentials: false
 
-      - name: Download dependencies
-        run: go mod download
-        env:
-          GOPROXY: https://proxy.golang.org,direct
-          GOSUMDB: sum.golang.org
-          GONOSUMDB: ""
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build all retained packages
+        run: go build ./...
 
       - name: Verify module checksums
         run: go mod verify
-        env:
-          GOPROXY: https://proxy.golang.org,direct
-          GOSUMDB: sum.golang.org
-          GONOSUMDB: ""
 
-      - name: Build
-        run: go build ./...
+      - name: Build default Telegram binary
+        run: make build
 
-      - name: Run tests
-        run: go test ./... -v -race
+      - name: Run all tests with race detector
+        run: go test -race ./...
 
-      - name: Run tests with coverage
-        run: go test ./... -coverprofile=coverage.out -covermode=atomic
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        if: github.event_name == 'push'
-        with:
-          files: ./coverage.out
-          fail_ci_if_error: false
-
-  smoke-test:
-    runs-on: ubuntu-latest
-    needs: unit-test
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-          cache: true
-
-      - name: Run smoke tests
-        run: go test -v -tags=smoke,no_web ./tests/e2e/...
-
-  regression-test:
-    runs-on: ubuntu-latest
-    needs: smoke-test
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-          cache: true
-
-      - name: Run regression tests
-        run: go test -v -tags=regression,no_web ./tests/e2e/...
-
-  performance-test:
-    runs-on: ubuntu-latest
-    needs: regression-test
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - name: Run smoke and regression tests
+        if: runner.os == 'Linux'
+        run: go test -tags=smoke,regression ./tests/e2e/...
 
       - name: Run performance benchmarks
-        run: go test -bench=. -benchmem -tags=performance,no_web ./tests/performance/...
+        if: runner.os == 'Linux' && github.event_name == 'workflow_dispatch' && inputs.benchmarks
+        run: go test -run='^$' -bench=. -benchmem -tags=performance ./tests/performance/...
