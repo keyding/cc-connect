@@ -405,6 +405,10 @@ type LocationAttachment struct {
 
 // Message represents a unified incoming message from any platform.
 type Message struct {
+	// SharedScope is an explicit platform group identity for the opt-in shared directory.
+	// SessionKey remains the personal or common default-selection entry.
+	SharedScope string
+
 	SessionKey   string // unique key for user context, e.g. "feishu:{chatID}:{userID}"
 	Platform     string
 	MessageID    string // platform message ID for tracing

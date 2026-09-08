@@ -1036,3 +1036,40 @@ func TestProgressStyleProviderInterface(t *testing.T) {
 	}
 }
 
+func TestSharedDirectoryMessageScope(t *testing.T) {
+	for _, common := range []bool{false, true} {
+		t.Run(fmt.Sprint(common), func(t *testing.T) {
+
+			// The preview is configured through the same options as a real instance.
+			configured, err := New(map[string]any{"token": "token", "allow_from": "7,8", "group_reply_all": true, "share_session_in_channel": common, "shared_session_directory": true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := configured.(*Platform)
+			p.bot = newStubTelegramBot()
+			p.selfUser = &models.User{ID: 42, Username: "mybot"}
+			var received []*core.Message
+			p.handler = func(_ core.Platform, m *core.Message) { received = append(received, m) }
+			for _, chatType := range []models.ChatType{models.ChatTypeSupergroup, models.ChatTypePrivate} {
+				for _, user := range []int64{7, 8} {
+					p.handleMessage(context.Background(), &models.Message{ID: 10, Date: int(time.Now().Unix()), Text: "/list", MessageThreadID: 55, From: &models.User{ID: user}, Chat: models.Chat{ID: 100, Type: chatType, IsForum: chatType == models.ChatTypeSupergroup}})
+				}
+			}
+			if len(received) != 4 {
+				t.Fatalf("messages: %d", len(received))
+			}
+			if received[0].SharedScope != "100" || received[1].SharedScope != "100" {
+				t.Fatal("missing group scope")
+			}
+			if received[2].SharedScope != "" || received[3].SharedScope != "" {
+				t.Fatal("private chat was shared")
+			}
+			if (received[0].SessionKey == received[1].SessionKey) != common {
+				t.Fatal("wrong selection mode")
+			}
+			if received[0].UserID == received[1].UserID {
+				t.Fatal("lost initiator")
+			}
+		})
+	}
+}

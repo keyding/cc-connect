@@ -105,14 +105,15 @@ func (t *stdlibTypingTicker) C() <-chan time.Time { return t.Ticker.C }
 type botFactory func(token string, onUpdate func(context.Context, *models.Update), httpClient *http.Client) (telegramBot, *models.User, func(context.Context), error)
 
 type Platform struct {
-	token                 string
-	allowFrom             string
-	groupReplyAll         bool
-	shareSessionInChannel bool
-	enableReactions       bool
-	replyToTrigger        bool
-	progressStyle         string // "legacy" | "compact" — telegram has no rich card, so "card" is mapped to "compact"
-	httpClient            *http.Client
+	token                  string
+	allowFrom              string
+	groupReplyAll          bool
+	shareSessionInChannel  bool
+	sharedSessionDirectory bool
+	enableReactions        bool
+	replyToTrigger         bool
+	progressStyle          string // "legacy" | "compact" — telegram has no rich card, so "card" is mapped to "compact"
+	httpClient             *http.Client
 
 	mu                  sync.RWMutex
 	bot                 telegramBot
@@ -163,6 +164,7 @@ func New(opts map[string]any) (core.Platform, error) {
 
 	groupReplyAll, _ := opts["group_reply_all"].(bool)
 	shareSessionInChannel, _ := opts["share_session_in_channel"].(bool)
+	sharedSessionDirectory, _ := opts["shared_session_directory"].(bool)
 	enableReactions, _ := opts["enable_reactions"].(bool)
 	replyToTrigger, _ := opts["reply_to_trigger"].(bool)
 
@@ -185,14 +187,15 @@ func New(opts map[string]any) (core.Platform, error) {
 	}
 
 	return &Platform{
-		token:                 token,
-		allowFrom:             allowFrom,
-		groupReplyAll:         groupReplyAll,
-		shareSessionInChannel: shareSessionInChannel,
-		enableReactions:       enableReactions,
-		replyToTrigger:        replyToTrigger,
-		progressStyle:         progressStyle,
-		httpClient:            httpClient,
+		token:                  token,
+		allowFrom:              allowFrom,
+		groupReplyAll:          groupReplyAll,
+		shareSessionInChannel:  shareSessionInChannel,
+		sharedSessionDirectory: sharedSessionDirectory,
+		enableReactions:        enableReactions,
+		replyToTrigger:         replyToTrigger,
+		progressStyle:          progressStyle,
+		httpClient:             httpClient,
 	}, nil
 }
 
@@ -584,7 +587,15 @@ func (p *Platform) handleMessage(ctx context.Context, msg *models.Message) {
 	}, msg)
 }
 
+func (p *Platform) sharedScope(chat models.Chat) string {
+	if p.sharedSessionDirectory && (chat.Type == models.ChatTypeGroup || chat.Type == models.ChatTypeSupergroup) {
+		return strconv.FormatInt(chat.ID, 10)
+	}
+	return ""
+}
+
 func (p *Platform) dispatchMessage(msg *core.Message, tgMsg *models.Message) {
+	msg.SharedScope = p.sharedScope(tgMsg.Chat)
 	// Enrich with platform-specific context (reply quotes, location text, etc.)
 	var extras []string
 	if replyText := enrichReplyContent(tgMsg); replyText != "" {
@@ -853,15 +864,16 @@ func (p *Platform) handleCallbackQuery(ctx context.Context, cb *models.CallbackQ
 		}
 
 		p.handler(p, &core.Message{
-			SessionKey: sessionKey,
-			Platform:   "telegram",
-			UserID:     userID,
-			UserName:   userName,
-			ChatName:   chatName,
-			Content:    command,
-			MessageID:  strconv.Itoa(msgID),
-			ChannelKey: channelKey,
-			ReplyCtx:   rctx,
+			SharedScope: p.sharedScope(msg.Chat),
+			SessionKey:  sessionKey,
+			Platform:    "telegram",
+			UserID:      userID,
+			UserName:    userName,
+			ChatName:    chatName,
+			Content:     command,
+			MessageID:   strconv.Itoa(msgID),
+			ChannelKey:  channelKey,
+			ReplyCtx:    rctx,
 		})
 		return
 	}
@@ -896,15 +908,16 @@ func (p *Platform) handleCallbackQuery(ctx context.Context, cb *models.CallbackQ
 		}
 
 		p.handler(p, &core.Message{
-			SessionKey: sessionKey,
-			Platform:   "telegram",
-			UserID:     userID,
-			UserName:   userName,
-			ChatName:   chatName,
-			Content:    data,
-			MessageID:  strconv.Itoa(msgID),
-			ChannelKey: channelKey,
-			ReplyCtx:   rctx,
+			SharedScope: p.sharedScope(msg.Chat),
+			SessionKey:  sessionKey,
+			Platform:    "telegram",
+			UserID:      userID,
+			UserName:    userName,
+			ChatName:    chatName,
+			Content:     data,
+			MessageID:   strconv.Itoa(msgID),
+			ChannelKey:  channelKey,
+			ReplyCtx:    rctx,
 		})
 		return
 	}
@@ -947,6 +960,7 @@ func (p *Platform) handleCallbackQuery(ctx context.Context, cb *models.CallbackQ
 	}
 
 	p.handler(p, &core.Message{
+		SharedScope:          p.sharedScope(msg.Chat),
 		SessionKey:           sessionKey,
 		Platform:             "telegram",
 		UserID:               userID,

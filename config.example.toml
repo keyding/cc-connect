@@ -3,6 +3,8 @@
 # 复制为 config.toml，设置环境变量，并填写已存在的项目路径。
 # Complete upstream options: docs/config.full.example.toml
 language = "zh"
+# Directory preview requires a NEW data_dir; see docs/shared-session-directory.md.
+# data_dir = "/absolute/path/to/cc-connect-directory-preview"
 
 [log]
 level = "info"
@@ -21,6 +23,8 @@ mode = "default"
 type = "telegram"
 
 [projects.platforms.options]
+# shared_session_directory = false # Opt-in directory preview; shared execution is not yet available
+# share_session_in_channel = false # false: each user per Topic; true: common selection per Topic
 # reply_to_trigger = false # Reply to the triggering message / 引用触发消息
 token = "${TELEGRAM_BOT_TOKEN}"
 allow_from = "${TELEGRAM_ALLOW_FROM}" # Telegram numeric user IDs, comma-separated

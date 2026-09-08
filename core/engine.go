@@ -355,6 +355,8 @@ type RateLimitCfg struct {
 
 // Engine routes messages between platforms and the agent for a single project.
 type Engine struct {
+	sharedDirectory *sharedDirectory
+
 	name                  string
 	agent                 Agent
 	platforms             []Platform
@@ -752,6 +754,7 @@ func NewEngine(name string, ag Agent, platforms []Platform, sessionStorePath str
 	ctx, cancel := context.WithCancel(context.Background())
 	e := &Engine{
 		name:                  name,
+		sharedDirectory:       newSharedDirectory(sessionStorePath),
 		agent:                 ag,
 		platforms:             platforms,
 		sessions:              NewSessionManager(sessionStorePath),
@@ -2887,6 +2890,21 @@ func (e *Engine) handleMessage(p Platform, msg *Message) {
 		UserName:   msg.UserName,
 		Content:    msg.Content,
 	})
+
+	// Shared drafts have no executor yet, including for audio and attachments.
+	if msg.SharedScope != "" {
+		if !e.checkRateLimit(msg) {
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgRateLimited))
+			return
+		}
+		content := e.resolveAlias(strings.TrimSpace(msg.Content))
+		if strings.HasPrefix(content, "/") {
+			e.handleCommand(p, msg, content)
+		} else {
+			e.handleSharedDirectory(p, msg, "", nil)
+		}
+		return
+	}
 
 	// Voice message: transcribe to text first
 	if msg.Audio != nil {
@@ -6776,6 +6794,16 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 		slog.Info("audit: command_executed",
 			"user_id", msg.UserID, "platform", msg.Platform,
 			"project", e.name, "command", cmdID)
+	}
+
+	if msg.SharedScope != "" {
+		switch cmdID {
+		case "new", "list", "switch", "name", "current":
+			e.handleSharedDirectory(p, msg, cmdID, args)
+		default:
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgSharedCommands))
+		}
+		return true
 	}
 
 	switch cmdID {
