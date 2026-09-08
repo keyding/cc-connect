@@ -1053,3 +1053,26 @@ func itoa(i int) string {
 	}
 	return string(buf[pos:])
 }
+
+func TestContextUsageDistinguishesReportedCapacity(t *testing.T) {
+	cs := &claudeSession{ctx: context.Background(), events: make(chan core.Event, 8)}
+	cs.activeModel.Store("provider-model")
+	cs.sessionID.Store("test-session")
+	assistant := map[string]any{"message": map[string]any{"usage": map[string]any{"input_tokens": float64(32000)}}}
+	cs.handleAssistant(assistant)
+	if u := cs.GetContextUsage(); u == nil || !u.ContextWindowEstimated {
+		t.Fatalf("guessed capacity presented as reported: %+v", u)
+	}
+	cs.handleResult(map[string]any{"modelUsage": map[string]any{"other-model": map[string]any{"contextWindow": float64(999999)}}})
+	if !cs.GetContextUsage().ContextWindowEstimated {
+		t.Fatal("another model's capacity was used")
+	}
+	cs.handleResult(map[string]any{"modelUsage": map[string]any{"provider-model": map[string]any{"contextWindow": float64(128000)}}})
+	if u := cs.GetContextUsage(); u.ContextWindowEstimated || u.ContextWindow != 128000 || u.UsedTokens != 32000 {
+		t.Fatalf("reported context not preserved: %+v", u)
+	}
+	cs.handleAssistant(assistant)
+	if !cs.GetContextUsage().ContextWindowEstimated {
+		t.Fatal("stale reported capacity reused for next call")
+	}
+}

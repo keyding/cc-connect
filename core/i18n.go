@@ -233,6 +233,9 @@ const (
 	MsgModeChanged               MsgKey = "mode_changed"
 	MsgModeNotSupported          MsgKey = "mode_not_supported"
 	MsgSessionRestarting         MsgKey = "session_restarting"
+	MsgPendingSessionLabel       MsgKey = "pending_session_label"
+	MsgPendingSessionUnavailable MsgKey = "pending_session_unavailable"
+	MsgModelContextUsage         MsgKey = "model_context_usage"
 	MsgSessionNotStarted         MsgKey = "session_not_started"
 	MsgUntitled                  MsgKey = "untitled"
 	MsgLangChanged               MsgKey = "lang_changed"
@@ -986,6 +989,15 @@ var messages = map[MsgKey]map[Language]string{
 		LangTraditionalChinese: "🔄 會話進程已退出，正在重啟...",
 		LangJapanese:           "🔄 セッションプロセスが終了しました。再起動中...",
 		LangSpanish:            "🔄 El proceso de sesión finalizó, reiniciando...",
+	},
+	MsgPendingSessionLabel: {
+		LangEnglish: " (pending)", LangChinese: "（待开始）", LangTraditionalChinese: "（待開始）", LangJapanese: "（未開始）", LangSpanish: " (pendiente)",
+	},
+	MsgPendingSessionUnavailable: {
+		LangEnglish: "Pending session unavailable; refresh /list.", LangChinese: "待开始会话已不可用，请刷新 /list。", LangTraditionalChinese: "待開始會話已不可用，請重新整理 /list。", LangJapanese: "未開始のセッションは利用できません。/list を更新してください。", LangSpanish: "Sesión pendiente no disponible; actualiza /list.",
+	},
+	MsgModelContextUsage: {
+		LangEnglish: "Context %s / %s (%.0f%%)", LangChinese: "上下文 %s / %s（%.0f%%）", LangTraditionalChinese: "上下文 %s / %s（%.0f%%）", LangJapanese: "コンテキスト %s / %s（%.0f%%）", LangSpanish: "Contexto %s / %s (%.0f%%)",
 	},
 	MsgSessionNotStarted: {
 		LangEnglish:            "(new — not yet started)",

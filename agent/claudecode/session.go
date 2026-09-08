@@ -721,6 +721,7 @@ func (cs *claudeSession) handleAssistant(raw map[string]any) {
 				CacheCreationInputTokens: cc,
 				OutputTokens:             prevOutput,
 				ContextWindow:            window,
+				ContextWindowEstimated:   true,
 			}
 			cs.usageMu.Unlock()
 		}
@@ -870,6 +871,21 @@ func (cs *claudeSession) handleResult(raw map[string]any) {
 			cs.lastUsage.TotalTokens = cs.lastUsage.UsedTokens + outputTokens
 		}
 		cs.usageMu.Unlock()
+	}
+
+	// Only use capacity reported for the active model, never another model's
+	// billing totals or a guessed model-name capacity in the compact footer.
+	if models, ok := raw["modelUsage"].(map[string]any); ok {
+		if usage, ok := models[cs.GetModel()].(map[string]any); ok {
+			if window, ok := usage["contextWindow"].(float64); ok && window > 0 {
+				cs.usageMu.Lock()
+				if cs.lastUsage != nil {
+					cs.lastUsage.ContextWindow = int(window)
+					cs.lastUsage.ContextWindowEstimated = false
+				}
+				cs.usageMu.Unlock()
+			}
+		}
 	}
 
 	evt := core.Event{
