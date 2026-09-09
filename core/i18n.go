@@ -1156,11 +1156,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "Sesiones compartidas:",
 	},
 	MsgSharedCurrentLabel: {
-		LangEnglish:            "(Current session)",
-		LangChinese:            "（当前会话）",
-		LangTraditionalChinese: "（目前會話）",
-		LangJapanese:           "（現在の会話）",
-		LangSpanish:            "(Sesión actual)",
+		LangEnglish:            "Current session",
+		LangChinese:            "当前会话",
+		LangTraditionalChinese: "目前會話",
+		LangJapanese:           "現在の会話",
+		LangSpanish:            "Sesión actual",
 	},
 	MsgSharedCurrent: {
 		LangEnglish:            "💬 Current: %s\n\n[%s] (%s)",
