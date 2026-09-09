@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // InteractionResponse is an explicit action or a reply bound to one question.
@@ -21,7 +22,13 @@ type ReceiptButtonSender interface {
 	SendWithButtonsWithReceipt(context.Context, any, string, [][]ButtonOption, func(MessageReference) error) error
 }
 
+// InteractionMessageUpdater replaces a published prompt and removes its controls.
+type InteractionMessageUpdater interface {
+	UpdateInteractionMessage(context.Context, MessageReference, string) error
+}
+
 type sharedInteraction struct {
+	messages  map[int]MessageReference // first published message for each question; guarded by sharedQueue.mu
 	token     string
 	request   sharedRequest
 	event     Event
@@ -156,7 +163,18 @@ func (e *Engine) sendSharedInteractionMessage(p Platform, target any, pending *s
 		}
 		q := e.sharedQueue
 		q.mu.Lock()
-		defer q.mu.Unlock()
+		defer func() {
+			q.mu.Unlock()
+			e.refreshSharedQuestion(p, pending, question)
+		}()
+		if question >= 0 {
+			if pending.messages == nil {
+				pending.messages = map[int]MessageReference{}
+			}
+			if _, exists := pending.messages[question]; !exists {
+				pending.messages[question] = ref
+			}
+		}
 		if pending.ctx.Err() != nil {
 			return fmt.Errorf("interaction expired during publication")
 		}
@@ -219,10 +237,40 @@ func (e *Engine) handleSharedInteraction(p Platform, msg *Message, response Inte
 	}
 	q := e.sharedQueue
 	q.mu.Lock()
+	pending := q.interactions[response.Token]
 	hint := e.acceptSharedInteractionLocked(q, msg, response)
 	q.mu.Unlock()
+	if pending != nil && (hint == MsgInteractionAnswerSaved || hint == MsgInteractionReceived) {
+		e.refreshSharedQuestion(p, pending, response.Question)
+	}
 	e.reply(p, msg.ReplyCtx, e.i18n.T(hint))
 }
+
+// Presentation failure never rolls back or resubmits an accepted answer.
+func (e *Engine) refreshSharedQuestion(p Platform, pending *sharedInteraction, question int) {
+	updater, ok := p.(InteractionMessageUpdater)
+	if !ok {
+		return
+	}
+	q := e.sharedQueue
+	q.mu.Lock()
+	ref, published := pending.messages[question]
+	answer, answered := pending.answers[question]
+	var text string
+	if published && answered {
+		text = fmt.Sprintf("%s\n\n%d. %s\n\n%s", "「"+pending.request.Session.Name+"」", question+1, pending.event.Questions[question].Question, e.i18n.Tf(MsgInteractionAnswered, answer))
+	}
+	q.mu.Unlock()
+	if text == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := updater.UpdateInteractionMessage(ctx, ref, text); err != nil {
+		slog.Warn("update answered question", "request", pending.request.ID, "question", question+1, "error", err)
+	}
+}
+
 func (e *Engine) acceptSharedInteractionLocked(q *sharedQueue, msg *Message, response InteractionResponse) MsgKey {
 	pending := q.interactions[response.Token]
 	if pending == nil || pending.ctx.Err() != nil {

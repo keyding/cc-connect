@@ -13,9 +13,11 @@ import (
 
 type interactionTestPlatform struct {
 	linkTestPlatform
-	authMu     sync.Mutex
-	denied     map[string]bool
-	buttonSets [][][]ButtonOption
+	authMu      sync.Mutex
+	denied      map[string]bool
+	buttonSets  [][][]ButtonOption
+	updates     map[string]string
+	failUpdates bool
 }
 
 func (p *interactionTestPlatform) AuthorizeSharedControl(scope, user string) bool {
@@ -36,6 +38,24 @@ func (p *interactionTestPlatform) SendWithButtonsWithReceipt(ctx context.Context
 	p.buttonSets = append(p.buttonSets, buttons)
 	p.authMu.Unlock()
 	return p.ReplyWithReceipt(ctx, target, text, record)
+}
+
+func (p *interactionTestPlatform) UpdateInteractionMessage(_ context.Context, ref MessageReference, text string) error {
+	p.authMu.Lock()
+	defer p.authMu.Unlock()
+	if p.updates == nil {
+		p.updates = map[string]string{}
+	}
+	p.updates[ref.MessageID] = text
+	if p.failUpdates {
+		return fmt.Errorf("simulated edit failure")
+	}
+	return nil
+}
+func (p *interactionTestPlatform) questionUpdate(id string) string {
+	p.authMu.Lock()
+	defer p.authMu.Unlock()
+	return p.updates[id]
 }
 
 type interactionDecision struct {
@@ -156,12 +176,27 @@ func sharedQuestionReplies(t *testing.T) {
 	}
 	send("bob", "3", "wrong owner", ref(3), nil)
 	noInteractionDecision(t, a)
+	if p.questionUpdate("bot-3") != "" {
+		t.Fatal("unauthorized answer edited the question")
+	}
 	send("alice", "4", "/new Beta", nil, nil)
 	send("alice", "5", "/srv/site", ref(3), nil)
+	if got := p.questionUpdate("bot-3"); !strings.Contains(got, "/srv/site") {
+		t.Fatalf("text answer not reflected: %s", got)
+	}
+	if p.questionUpdate("bot-1") != "" {
+		t.Fatal("unanswered choice was edited")
+	}
 	send("alice", "6", "overwrite answer", ref(3), nil)
 	send("alice", "7", "1,3", ref(2), nil)
 	noInteractionDecision(t, a)
 	send("alice", "8", "", nil, &InteractionResponse{Token: token, Action: "option", Question: 0, Option: 1})
+	if got := p.questionUpdate("bot-1"); !strings.Contains(got, "dark") || strings.Contains(got, "/answer") {
+		t.Fatalf("choice not finalized: %s", got)
+	}
+	if got := p.questionUpdate("bot-3"); strings.Contains(got, "overwrite answer") {
+		t.Fatal("duplicate answer edited the question")
+	}
 	decision := nextInteractionDecision(t, a)
 	answers := decision.result.UpdatedInput["answers"].(map[string]any)
 	if answers["Theme?"] != "dark" || answers["Features?"] != "blog, gallery" || answers["Notes?"] != "/srv/site" {
@@ -232,12 +267,13 @@ func (p *earlyInteractionPlatform) SendWithButtonsWithReceipt(ctx context.Contex
 }
 
 func TestSharedInteractionResponseBeforeSendReceipt(t *testing.T) {
-	for _, kind := range []string{"approval", "single choice", "fallback"} {
+	for _, kind := range []string{"approval", "single choice", "fallback", "edit failure"} {
 		t.Run(kind, func(t *testing.T) {
 			a := &interactionTestAgent{queueTestAgent: queueTestAgent{dir: t.TempDir(), calls: make(chan *queueTestSession, 10)}, decisions: make(chan interactionDecision, 10)}
 			p := &earlyInteractionPlatform{interactionTestPlatform: interactionTestPlatform{linkTestPlatform: linkTestPlatform{queueTestPlatform: queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}}}}
 			e := NewEngine("project", a, []Platform{p}, filepath.Join(t.TempDir(), "sessions"), LangEnglish)
 			t.Cleanup(func() { _ = e.Stop() })
+			p.failUpdates = kind == "edit failure"
 			p.onVisible = func(text string, buttons [][]ButtonOption) {
 				token := strings.Split(buttons[0][0].Data, ":")[1]
 				msg := &Message{Platform: "test", SharedScope: "group", SessionKey: "alice", UserID: "alice", MessageID: "answer", ReplyCtx: "alice"}
@@ -263,6 +299,9 @@ func TestSharedInteractionResponseBeforeSendReceipt(t *testing.T) {
 			}
 			run.events <- event
 			d := nextInteractionDecision(t, a)
+			if kind != "approval" {
+				waitQueue(t, func() bool { return strings.Contains(p.questionUpdate("bot-1"), "first") })
+			}
 			if d.id != "early" || d.result.Behavior != "allow" {
 				t.Fatal(d)
 			}

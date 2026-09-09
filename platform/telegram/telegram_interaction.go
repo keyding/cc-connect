@@ -89,3 +89,31 @@ func (p *Platform) replyInteractionCallback(ctx context.Context, target interact
 	}
 	return nil
 }
+
+// UpdateInteractionMessage replaces an accepted question with its answer and
+// explicitly clears the old keyboard. Text is plain to preserve user input.
+func (p *Platform) UpdateInteractionMessage(ctx context.Context, ref core.MessageReference, text string) error {
+	chat, err := strconv.ParseInt(ref.Scope, 10, 64)
+	if err != nil || chat == 0 {
+		return fmt.Errorf("telegram: invalid interaction chat reference")
+	}
+	message, err := strconv.Atoi(ref.MessageID)
+	if err != nil || message <= 0 {
+		return fmt.Errorf("telegram: invalid interaction message reference")
+	}
+	bot, err := p.connectedBot("update interaction")
+	if err != nil {
+		return err
+	}
+	if runes := []rune(text); len(runes) > telegramMaxMessageLen {
+		text = string(runes[:telegramMaxMessageLen-1]) + "…"
+	}
+	_, err = bot.EditMessageText(ctx, &tgbot.EditMessageTextParams{
+		ChatID: chat, MessageID: message, Text: text,
+		ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}},
+	})
+	if err != nil && !strings.Contains(err.Error(), "message is not modified") {
+		return fmt.Errorf("telegram: update answered question: %w", err)
+	}
+	return nil
+}

@@ -790,6 +790,7 @@ const (
 	MsgInteractionDenied      MsgKey = "shared_interaction_denied"
 	MsgInteractionStale       MsgKey = "shared_interaction_stale"
 	MsgInteractionReceived    MsgKey = "shared_interaction_received"
+	MsgInteractionAnswered    MsgKey = "shared_interaction_answered"
 	MsgInteractionAnswerSaved MsgKey = "shared_interaction_answersaved"
 	MsgInteractionWaiting     MsgKey = "shared_interaction_waiting"
 	MsgInteractionAllow       MsgKey = "shared_interaction_allow"
@@ -889,6 +890,13 @@ var messages = map[MsgKey]map[Language]string{
 		LangTraditionalChinese: "已收到此任務的互動回應。",
 		LangJapanese:           "このタスクへの回答を受け付けました。",
 		LangSpanish:            "Respuesta recibida para esta tarea.",
+	},
+	MsgInteractionAnswered: {
+		LangEnglish:            "✅ Answered: %s",
+		LangChinese:            "✅ 已选择：%s",
+		LangTraditionalChinese: "✅ 已選擇：%s",
+		LangJapanese:           "✅ 回答済み：%s",
+		LangSpanish:            "✅ Respuesta: %s",
 	},
 	MsgInteractionAnswerSaved: {
 		LangEnglish:            "Answer recorded. Please answer the remaining questions.",
