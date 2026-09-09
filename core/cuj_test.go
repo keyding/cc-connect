@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -2902,17 +2903,17 @@ func TestCUJ_B16_SharedQueueStopCancelAndExplicitResume(t *testing.T) {
 	send("bob", "4", "cancel me")
 	send("alice", "5", "keep me")
 	listing := send("bob", "6", "/queue")
-	requestID := func(prefix string, text string) string {
+	requestID := func(user string, text string) string {
 		for _, line := range strings.Split(text, "\n") {
-			if strings.HasPrefix(line, prefix) {
-				return strings.TrimPrefix(line, prefix)
+			if strings.HasPrefix(line, "⌛️ ") && strings.HasSuffix(line, " ("+user+")") {
+				return strings.Fields(line)[1]
 			}
 		}
-		t.Fatalf("missing %s in %s", prefix, text)
+		t.Fatalf("missing %s in %s", user, text)
 		return ""
 	}
-	cancelID := requestID("/cancel ", listing)
-	stopID := requestID("/stop ", listing)
+	cancelID := requestID("bob", listing)
+	stopID := requestID("alice", listing)
 	resumeID := stopID
 	if got := send("alice", "7", "/cancel "+cancelID); !strings.Contains(got, "Only the requester") {
 		t.Fatal(got)
@@ -2974,7 +2975,7 @@ func TestCUJ_B16_SharedQueueStopCancelAndExplicitResume(t *testing.T) {
 	before := len(p.getSent())
 	queueMessage(reopened, p, "alice", "17", "/queue")
 	got := strings.Join(p.getSent()[before:], "\n")
-	if !strings.Contains(got, cancelID+" — requester bob — cancelled") {
+	if !strings.Contains(got, "❌ "+cancelID+" (bob)") {
 		t.Fatal(got)
 	}
 	noQueueSession(t, a)
@@ -3386,7 +3387,7 @@ func TestCUJ_B17_UncertainAdmissionFencesExecutionAndProvidesStableLookup(t *tes
 			before := len(p.getSent())
 			queueMessage(e, p, "alice", "3", "/queue")
 			listing := strings.Join(p.getSent()[before:], "\n")
-			if !strings.Contains(listing, "requester alice — acceptance unconfirmed") {
+			if !strings.Contains(listing, "(alice) — acceptance unconfirmed") {
 				t.Fatal(listing)
 			}
 			queueMessage(e, p, "alice", "4", "/queue "+lookup)
@@ -3415,7 +3416,7 @@ func TestCUJ_B17_UncertainAdmissionFencesExecutionAndProvidesStableLookup(t *tes
 			if !committed {
 				noQueueSession(t, ra)
 				queueMessage(restored, rp, "alice", "7", "/queue")
-				if got := strings.Join(rp.getSent(), "\n"); strings.Contains(got, "requester alice") {
+				if got := strings.Join(rp.getSent(), "\n"); strings.Contains(got, "(alice)") {
 					t.Fatal(got)
 				}
 				// The user checks absence before an explicit new submission.
@@ -3547,7 +3548,7 @@ func TestCUJ_B20_RestartTimeoutAndRevokedInteractionEntries(t *testing.T) {
 				t.Fatal(got)
 			}
 			send("bob", "7", "/queue", nil)
-			if got := strings.Join(p.getSent(), "\n"); !strings.Contains(got, "bob") || !strings.Contains(got, "queued") {
+			if got := strings.Join(p.getSent(), "\n"); !regexp.MustCompile(`(?m)^⌛️ [^\n]+ \(bob\)$`).MatchString(got) {
 				t.Fatal(got)
 			}
 			if mode == "restart" {
@@ -3607,7 +3608,7 @@ func TestCUJ_B21_RevocationCancelsOwnQueueAndStopsWaitingExecutor(t *testing.T) 
 	}
 	noInteractionDecision(t, a)
 	listing := send("bob", "20", "/queue")
-	if !strings.Contains(listing, "requester alice — cancelled") || !strings.Contains(listing, "stop requested; awaiting exit") || !strings.Contains(listing, "requester bob — queued") {
+	if !regexp.MustCompile(`(?m)^❌ [^\n]+ \(alice\)$`).MatchString(listing) || !strings.Contains(listing, "stop requested; awaiting exit") || !regexp.MustCompile(`(?m)^⌛️ [^\n]+ \(bob\)$`).MatchString(listing) {
 		t.Fatal(listing)
 	}
 	if got := send("bob", "21", "/delete"); !strings.Contains(got, e.i18n.T(MsgSharedDeleteBusy)) {
@@ -3786,7 +3787,7 @@ func TestCUJ_B21_RestartRechecksQueuedRequestOwnersBeforeDispatch(t *testing.T) 
 	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "Bob completed") })
 	noQueueSession(t, a)
 	send("bob", "5", "/queue")
-	if got := strings.Join(p.getSent(), "\n"); !strings.Contains(got, "requester alice — cancelled") {
+	if got := strings.Join(p.getSent(), "\n"); !regexp.MustCompile(`(?m)^❌ [^\n]+ \(alice\)$`).MatchString(got) {
 		t.Fatal(got)
 	}
 }
@@ -3938,7 +3939,7 @@ func sharedHistoryPresentationAcrossRestart(t *testing.T) {
 	}
 	queueMessage(e, p, "bob", "queue", "/queue")
 	sent := p.getSent()
-	if got := sent[len(sent)-1]; !strings.Contains(got, "💬 **「Weather」**") || !strings.Contains(got, "bob display") {
+	if got := sent[len(sent)-1]; !strings.Contains(got, "会话 :「Weather」") || !strings.Contains(got, "bob display") {
 		t.Fatal(got)
 	}
 }

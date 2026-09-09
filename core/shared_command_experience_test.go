@@ -135,3 +135,20 @@ func TestSharedCommandAuditCoversEveryBuiltin(t *testing.T) {
 		}
 	}
 }
+
+func TestSharedQueueCompactPresentation(t *testing.T) {
+	e, _, _ := newQueueEngine(t, t.TempDir(), filepath.Join(t.TempDir(), "sessions"))
+	e.i18n.SetLang(LangChinese)
+	session := sharedSession{ID: "session-id", Name: "更新个人网站"}
+	q := &sharedQueue{requests: []sharedRequest{
+		{ID: "session-id-1", Session: session, Status: "completed", UserDisplayName: "Caven", UserName: "username", UserID: "123"},
+		{ID: "session-id-15", Session: session, Status: "queued", UserName: "Caven"},
+		{ID: "session-id-12", Session: session, Status: "cancelled", UserDisplayName: "Caven"},
+		{ID: "session-id-16", Session: session, Status: "running", UserID: "456"},
+		{ID: "hidden", Session: sharedSession{ID: "other"}, Status: "completed"},
+	}}
+	want := "会话 :「更新个人网站」（`session-id`）\n\n任务队列：\n\n✅ session-id-1（Caven）\n⌛️ session-id-15（Caven）\n❌ session-id-12（Caven）\n⌛️ session-id-16（456）"
+	if got := e.sharedQueueView(q, session); got != want {
+		t.Fatalf("queue layout mismatch:\n%s", got)
+	}
+}
