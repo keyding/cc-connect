@@ -502,3 +502,127 @@ func waitForWrittenJSONLine(t *testing.T, w *lockedWriteCloser) string {
 		}
 	}
 }
+
+func TestAppServerSession_RespondPermissionRejectsDuplicate(t *testing.T) {
+	ch := make(chan core.PermissionResult, 1)
+	s := &appServerSession{
+		ctx:              context.Background(),
+		pendingApprovals: map[string]chan core.PermissionResult{"approval": ch},
+	}
+	results := make(chan error, 2)
+	for range 2 {
+		go func() { results <- s.RespondPermission("approval", core.PermissionResult{Behavior: "allow"}) }()
+	}
+	succeeded := 0
+	for range 2 {
+		if <-results == nil {
+			succeeded++
+		}
+	}
+	if succeeded != 1 {
+		t.Fatalf("accepted %d responses, want exactly one", succeeded)
+	}
+	if err := s.RespondPermission("stale", core.PermissionResult{Behavior: "allow"}); err == nil {
+		t.Fatal("stale response was accepted")
+	}
+}
+
+func TestAppServerSession_ApprovalTimeoutEmitsErrorAndRejectsLateResponse(t *testing.T) {
+	ch := make(chan core.PermissionResult, 1)
+	stdin := &lockedWriteCloser{}
+	s := &appServerSession{
+		ctx: context.Background(), events: make(chan core.Event, 1), stdin: stdin,
+		pendingApprovals: map[string]chan core.PermissionResult{"approval": ch},
+	}
+	expired := make(chan time.Time, 1)
+	expired <- time.Now()
+	if _, ok := s.waitApproval("approval", ch, expired); ok {
+		t.Fatal("timeout returned an approval/denial instead of terminating the interaction")
+	}
+	select {
+	case event := <-s.Events():
+		if event.Type != core.EventError || event.Error == nil || !strings.Contains(event.Error.Error(), "timed out") {
+			t.Fatalf("timeout event = %#v", event)
+		}
+	default:
+		t.Fatal("timeout must emit EventError so the shared queue pauses")
+	}
+	if err := s.RespondPermission("approval", core.PermissionResult{Behavior: "allow"}); err == nil {
+		t.Fatal("expired response was accepted")
+	}
+	if stdin.String() != "" {
+		t.Fatal("timeout must not send a denial that permits the turn to continue")
+	}
+}
+
+func TestAppServerSession_ApprovalResponseWinsExpiryRace(t *testing.T) {
+	ch := make(chan core.PermissionResult, 1)
+	s := &appServerSession{
+		ctx: context.Background(), events: make(chan core.Event, 1),
+		pendingApprovals: map[string]chan core.PermissionResult{"approval": ch},
+	}
+	if err := s.RespondPermission("approval", core.PermissionResult{Behavior: "allow"}); err != nil {
+		t.Fatal(err)
+	}
+	expired := make(chan time.Time)
+	close(expired)
+	result, ok := s.waitApproval("approval", ch, expired)
+	if !ok || result.Behavior != "allow" {
+		t.Fatalf("accepted response lost to expiry: %#v, %v", result, ok)
+	}
+	select {
+	case event := <-s.Events():
+		t.Fatalf("accepted response produced extra event: %#v", event)
+	default:
+	}
+}
+
+func TestAppServerSession_ApprovalCancellationRejectsLateResponse(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	ch := make(chan core.PermissionResult, 1)
+	s := &appServerSession{
+		ctx: ctx, events: make(chan core.Event, 1),
+		pendingApprovals: map[string]chan core.PermissionResult{"approval": ch},
+	}
+	cancel()
+	if err := s.RespondPermission("approval", core.PermissionResult{Behavior: "allow"}); err == nil {
+		t.Fatal("cancelled session accepted a response")
+	}
+	if _, ok := s.waitApproval("approval", ch, nil); ok {
+		t.Fatal("cancelled interaction returned a response")
+	}
+}
+
+func TestAppServerSession_ApprovalContractsConsumeRequestOnce(t *testing.T) {
+	for _, tc := range []struct {
+		method string
+		tool   string
+		params map[string]any
+		want   string
+	}{
+		{"item/commandExecution/requestApproval", "Bash", map[string]any{"command": "pwd"}, `"decision":"accept"`},
+		{"item/fileChange/requestApproval", "Patch", map[string]any{"reason": "update file"}, `"decision":"accept"`},
+		{"item/permissions/requestApproval", "Permissions", map[string]any{"permissions": map[string]any{"network": true}}, `"permissions":{"network":true}`},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			stdin := &lockedWriteCloser{}
+			s := &appServerSession{ctx: ctx, events: make(chan core.Event, 4), stdin: stdin, pendingApprovals: make(map[string]chan core.PermissionResult)}
+			s.handleServerRequest(serverRequestProbe(t, `"approval-1"`, tc.method, tc.params))
+			event := <-s.Events()
+			if event.Type != core.EventPermissionRequest || event.ToolName != tc.tool || event.RequestID != `"approval-1"` {
+				t.Fatalf("approval event = %#v", event)
+			}
+			if err := s.RespondPermission(event.RequestID, core.PermissionResult{Behavior: "allow"}); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.RespondPermission(event.RequestID, core.PermissionResult{Behavior: "deny"}); err == nil {
+				t.Fatal("duplicate response succeeded")
+			}
+			if line := waitForWrittenJSONLine(t, stdin); !strings.Contains(line, tc.want) {
+				t.Fatalf("response = %s, want %s", line, tc.want)
+			}
+		})
+	}
+}
