@@ -364,29 +364,27 @@ func TestMarkdownToSimpleHTML_Table(t *testing.T) {
 }
 
 func TestMarkdownToSimpleHTML_TableWithFormatting(t *testing.T) {
-	// Telegram's HTML parser accepts <b>, <i>, <code>, <a> inside <pre>, so
-	// bold/italic/inline-code/link cells should render as the corresponding
-	// tags — not as literal `**Header**` and friends.
+	// Preformatted tables contain escaped plain text, without nested entities.
 	md := "| **Header** | `code` |\n|---|---|\n| *italic* | normal |"
 	out := MarkdownToSimpleHTML(md)
 	if !strings.Contains(out, "<pre>") {
 		t.Errorf("expected table wrapped in <pre>, got %q", out)
 	}
-	if !strings.Contains(out, "<b>Header</b>") {
-		t.Errorf("expected **Header** to render as <b>Header</b>, got %q", out)
+	if !strings.Contains(out, "Header") {
+		t.Errorf("expected **Header** to render as plain Header, got %q", out)
 	}
-	if !strings.Contains(out, "<code>code</code>") {
-		t.Errorf("expected `code` to render as <code>code</code>, got %q", out)
+	if !strings.Contains(out, "code") {
+		t.Errorf("expected `code` to render as plain code, got %q", out)
 	}
-	if !strings.Contains(out, "<i>italic</i>") {
-		t.Errorf("expected *italic* to render as <i>italic</i>, got %q", out)
+	if !strings.Contains(out, "italic") {
+		t.Errorf("expected *italic* to render as plain italic, got %q", out)
 	}
 	// The literal markdown markers must be gone from cells.
 	if strings.Contains(out, "**Header**") {
-		t.Errorf("literal **Header** should have been replaced by <b>Header</b>, got %q", out)
+		t.Errorf("literal **Header** should have been removed, got %q", out)
 	}
 	if strings.Contains(out, "`code`") {
-		t.Errorf("literal `code` should have been replaced by <code>code</code>, got %q", out)
+		t.Errorf("literal `code` should have been removed, got %q", out)
 	}
 }
 
@@ -404,25 +402,25 @@ func TestMarkdownToSimpleHTML_TableCellAlignmentWithFormatting(t *testing.T) {
 		t.Errorf("expected separator row matching stripped column widths (5+5), got %q", out)
 	}
 	// Body rows should pad to the same visual column width.
-	// "hunt" is 4 runes, col width is 5, so one trailing space after </b>.
-	if !strings.Contains(out, "<b>hunt</b>  | debug") {
-		t.Errorf("expected hunt cell rendered with bold + single-space pad, got %q", out)
+	// "hunt" is 4 runes, col width is 5, so one trailing space after hunt.
+	if !strings.Contains(out, "hunt  | debug") {
+		t.Errorf("expected hunt cell rendered with single-space pad, got %q", out)
 	}
-	if !strings.Contains(out, "<b>think</b> | plan") {
-		t.Errorf("expected think cell rendered with bold + no pad (5 runes matches col width), got %q", out)
+	if !strings.Contains(out, "think | plan") {
+		t.Errorf("expected think cell rendered with no pad (5 runes matches col width), got %q", out)
 	}
 }
 
 // TestMarkdownToSimpleHTML_TableCellWithLink verifies that links in cells
-// are rendered as clickable <a> tags (Telegram supports <a> inside <pre>).
+// retain their destination as text without invalid nested entities.
 func TestMarkdownToSimpleHTML_TableCellWithLink(t *testing.T) {
 	md := "| Source | Dest |\n|---|---|\n| [Waza](https://github.com/tw93/Waza) | local |"
 	out := MarkdownToSimpleHTML(md)
-	if !strings.Contains(out, `<a href="https://github.com/tw93/Waza">Waza</a>`) {
+	if !strings.Contains(out, `Waza (https://github.com/tw93/Waza)`) {
 		t.Errorf("expected link rendered inside table cell, got %q", out)
 	}
 	if strings.Contains(out, "[Waza]") {
-		t.Errorf("literal [Waza] should have been replaced by <a> tag, got %q", out)
+		t.Errorf("literal [Waza] should have been converted to text, got %q", out)
 	}
 }
 
@@ -437,7 +435,7 @@ func TestTableCellVisualWidth(t *testing.T) {
 		{"*hunt*", 4},
 		{"~~hunt~~", 4},
 		{"***hunt***", 4},
-		{"[Waza](https://github.com/tw93/Waza)", 4},
+		{"[Waza](https://github.com/tw93/Waza)", len("Waza (https://github.com/tw93/Waza)")},
 		{"调试错误", 4}, // 4 runes, regardless of UTF-8 byte count
 		{"normal", 6},
 		{"", 0},
@@ -585,7 +583,7 @@ func TestMarkdownToSimpleHTML_Wikilink(t *testing.T) {
 	}{
 		{"simple wikilink", "see [[MyPage]]", "MyPage"},
 		{"wikilink with display text", "see [[MyPage|Display Text]]", "Display Text"},
-		{"wikilink escapes html", "see [[Page<script>]]", "Page&lt;script&gt;"},  // escapeHTML in step 3 handles this
+		{"wikilink escapes html", "see [[Page<script>]]", "Page&lt;script&gt;"}, // escapeHTML in step 3 handles this
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -659,5 +657,12 @@ func TestMarkdownToSimpleHTML_ManyInlineCodePlaceholders(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %s, got %q", want, out)
 		}
+	}
+}
+
+func TestTablePreDoesNotNestFormattingEntities(t *testing.T) {
+	out := MarkdownToSimpleHTML("| Check | Result |\n|---|---|\n| HTTP | **200** |\n| Title | `<title>Example</title>` |")
+	if strings.Contains(out, "<b>") || strings.Contains(out, "<code>") {
+		t.Fatalf("invalid formatting inside pre: %s", out)
 	}
 }
