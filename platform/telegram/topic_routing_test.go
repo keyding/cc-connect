@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -32,10 +33,27 @@ func TestTopicRootReplyAfterSwitchUsesSelectedSession(t *testing.T) {
 	e := core.NewEngine("project", a, []core.Platform{p}, filepath.Join(t.TempDir(), "sessions"), core.LangChinese)
 	t.Cleanup(func() { _ = e.Stop() })
 	p.handler = e.ReceiveMessage
-	chat := models.Chat{ID: -100, Type: models.ChatTypeSupergroup}
+	chat := models.Chat{ID: -100, Type: models.ChatTypeSupergroup, IsForum: true}
 	root := &models.Message{ID: 4, Chat: chat, From: &models.User{ID: 1, IsBot: true}, ForumTopicCreated: &models.ForumTopicCreated{Name: "test"}}
-	for i, content := range []string{"/new test", "/switch 1", "/current", "今天的天气"} {
-		p.dispatchMessage(&core.Message{MessageID: fmt.Sprint(10 + i), Platform: "telegram", UserID: "7", SessionKey: "telegram:-100:4:7", Content: content, ReplyCtx: replyContext{chatID: -100, threadID: 4, messageID: 10 + i}}, &models.Message{ID: 10 + i, Chat: chat, IsTopicMessage: true, MessageThreadID: 4, ReplyToMessage: root})
+	for i, content := range []string{"/new test", "/switch 1", "/current", "hey", "@testbot 今天的天气"} {
+		msg := &models.Message{ID: 10 + i, Date: int(time.Now().Unix()), From: &models.User{ID: 7}, Text: content, Chat: chat, IsTopicMessage: true, MessageThreadID: 4, ReplyToMessage: root}
+		if strings.HasPrefix(content, "/") {
+			msg.Entities = []models.MessageEntity{{Type: models.MessageEntityTypeBotCommand, Offset: 0, Length: len(strings.Fields(content)[0])}}
+		} else if strings.HasPrefix(content, "@testbot") {
+			msg.Entities = []models.MessageEntity{{Type: models.MessageEntityTypeMention, Offset: 0, Length: 8}}
+		}
+		p.handleMessage(context.Background(), msg)
+		if content == "hey" {
+			select {
+			case reply := <-replies:
+				t.Fatalf("ordinary topic message got reply: %s", reply)
+			case <-time.After(50 * time.Millisecond):
+			}
+			if a.starts.Load() != 0 {
+				t.Fatal("ordinary topic message started Agent")
+			}
+			continue
+		}
 		select {
 		case reply := <-replies:
 			if strings.Contains(reply, "无法确认") {
