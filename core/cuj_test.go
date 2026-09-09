@@ -3855,7 +3855,7 @@ func TestCUJ_B14_SharedHistoryAndSelectionAcrossRestart(t *testing.T) {
 
 	queueMessage(e, p, "bob", "5", "/list")
 	sent = p.getSent()
-	if listing := sent[len(sent)-1]; !strings.Contains(listing, "> 1. **「Alpha」**\n> \n> ") || !strings.HasPrefix(listing, "共享会话：\n\n") || strings.Contains(listing, "👉") {
+	if listing := sent[len(sent)-1]; !strings.Contains(listing, "> 1. **「Alpha」**\n> `") || !strings.HasPrefix(listing, "共享会话：\n\n") || strings.Contains(listing, "👉") {
 		t.Fatal(sent[len(sent)-1])
 	}
 	if err := e.Stop(); err != nil {
@@ -3879,6 +3879,16 @@ func TestCUJ_B14_SharedHistoryAndSelectionAcrossRestart(t *testing.T) {
 	queueMessage(e, p, "bob", "list-beta", "/list")
 	sent = p.getSent()
 	listing := sent[len(sent)-1]
+	entries := strings.Split(listing, "\n\n")
+	if len(entries) != 3 || strings.Contains(listing, " · ") {
+		t.Fatalf("list must have one blank line between entries and omit agent type: %s", listing)
+	}
+	for i, entry := range entries[1:] {
+		lines := strings.Split(entry, "\n")
+		if len(lines) != 2 || !strings.HasPrefix(strings.TrimPrefix(lines[1], "> "), "`") {
+			t.Fatalf("entry %d must put ID directly below title: %s", i+1, entry)
+		}
+	}
 	rendered := MarkdownToSimpleHTML(listing)
 	if strings.Count(rendered, "<blockquote>") != 1 || !strings.Contains(rendered, "<blockquote>2. <b>「Beta」</b>") || strings.Contains(listing, "> 1.") || strings.Contains(listing, "👉") {
 		t.Fatalf("only current session should be quoted: %s", rendered)
