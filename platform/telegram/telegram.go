@@ -623,8 +623,29 @@ func (p *Platform) dispatchMessage(msg *core.Message, tgMsg *models.Message) {
 	p.mu.RUnlock()
 	msg.QuotedMessage = telegramHistoryQuote(tgMsg)
 	msg.BotReply = p.replyReference(tgMsg)
+	// Quoted photos belong to the current request, even when the original
+	// ordinary group message was never admitted to the agent.
+	if reply := tgMsg.ReplyToMessage; msg.AttachmentError == nil && reply != nil && !isForumTopicRootReply(tgMsg) && len(reply.Photo) > 0 {
+		photo := reply.Photo[len(reply.Photo)-1]
+		data, err := p.downloadFile(photo.FileID)
+		if err != nil {
+			slog.Error("telegram: download quoted photo failed", "error", err)
+			if rc, ok := msg.ReplyCtx.(replyContext); ok {
+				p.rejectSharedAttachment(tgMsg, rc, err)
+			}
+			return
+		}
+		msg.Images = append(msg.Images, core.ImageAttachment{MimeType: "image/jpeg", Data: data})
+	}
 	// Enrich with platform-specific context (reply quotes, location text, etc.)
 	var extras []string
+	originalText := tgMsg.Text
+	if originalText == "" {
+		originalText = tgMsg.Caption
+	}
+	if name := p.botUsername(); name != "" && strings.Contains(strings.ToLower(originalText), "@"+strings.ToLower(name)) {
+		extras = append(extras, "[The current message is explicitly addressed to the assistant. Any quoted author identifies the source of context, not the recipient of this request.]")
+	}
 	if replyText := enrichReplyContent(tgMsg); replyText != "" {
 		extras = append(extras, replyText)
 	}
