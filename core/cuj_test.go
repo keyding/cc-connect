@@ -3930,3 +3930,61 @@ func sharedHistoryPresentationAcrossRestart(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestCUJ_B14_SharedModelModeCommandsPreserveConversation(t *testing.T) {
+	a := &sharedSettingsAgent{queueTestAgent: queueTestAgent{dir: t.TempDir(), calls: make(chan *queueTestSession, 10)}, model: "first", mode: "default", effort: "low", started: make(chan string, 10)}
+	p := &queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}
+	e := NewEngine("project", a, []Platform{p}, filepath.Join(t.TempDir(), "sessions"), LangEnglish)
+	t.Cleanup(func() { _ = e.Stop() })
+	send := func(text string) string {
+		queueMessage(e, p, "alice", text, text)
+		rows := p.getSent()
+		return rows[len(rows)-1]
+	}
+	send("/new Alpha")
+	for _, cmd := range []string{"/model", "/mode", "/reasoning"} {
+		if got := send(cmd); strings.Contains(got, "Shared mode commands:") || !strings.Contains(got, "Project defaults") {
+			t.Fatal(got)
+		}
+	}
+	send("first question")
+	first := nextQueueSession(t, &a.queueTestAgent)
+	<-first.sent
+	if got := <-a.started; got != "first/default/low" {
+		t.Fatal(got)
+	}
+	if got := send("/model switch 2"); !strings.Contains(got, "second") {
+		t.Fatal(got)
+	}
+	if got := send("/mode plan"); !strings.Contains(got, "Plan") {
+		t.Fatal(got)
+	}
+	if got := send("/effort high"); !strings.Contains(got, "high") {
+		t.Fatal(got)
+	}
+	send("second question")
+	first.events <- Event{Type: EventResult, Done: true, Content: "first answer"}
+	second := nextQueueSession(t, &a.queueTestAgent)
+	<-second.sent
+	if got := <-a.started; got != "second/plan/high" {
+		t.Fatal(got)
+	}
+	second.events <- Event{Type: EventResult, Done: true, Content: "second answer"}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "second answer") })
+	if got := send("/history"); !strings.Contains(got, "first answer") || !strings.Contains(got, "second answer") {
+		t.Fatal(got)
+	}
+	if got := send("/current"); !strings.Contains(got, "Alpha") {
+		t.Fatal(got)
+	}
+	e.SetDisabledCommands([]string{"model"})
+	if got := send("/model first"); !strings.Contains(got, "disabled") {
+		t.Fatal(got)
+	}
+	if got := send("/mode"); !strings.Contains(got, "Plan") {
+		t.Fatal(got)
+	}
+	if got := send("/compress"); !strings.Contains(got, "not yet supported") {
+		t.Fatal(got)
+	}
+}

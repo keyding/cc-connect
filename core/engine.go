@@ -6834,6 +6834,21 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 
 	if msg.SharedScope != "" {
 		switch cmdID {
+		case "model":
+			e.cmdModel(p, msg, args)
+		case "mode":
+			e.cmdMode(p, msg, args)
+		case "reasoning":
+			e.cmdReasoning(p, msg, args)
+		case "usage":
+			e.cmdUsage(p, msg)
+		case "lang":
+			e.cmdLang(p, msg, args)
+		case "whoami":
+			e.cmdWhoami(p, msg)
+		case "version":
+			e.reply(p, msg.ReplyCtx, VersionInfo)
+
 		case "approve", "deny", "answer":
 			e.sharedInteractionCommand(p, msg, cmdID, args)
 		case "delete":
@@ -6843,7 +6858,11 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 		case "new", "list", "switch", "name", "current", "history":
 			e.handleSharedDirectory(p, msg, cmdID, args)
 		default:
-			e.reply(p, msg.ReplyCtx, e.sharedCommandHelp())
+			help := e.sharedCommandHelp()
+			if cmdID != "" && cmdID != "help" {
+				help = e.i18n.Tf(MsgSharedUnsupportedCommand, "/"+cmdID) + "\n\n" + help
+			}
+			e.reply(p, msg.ReplyCtx, help)
 		}
 		return true
 	}
@@ -9983,6 +10002,9 @@ func (e *Engine) cmdModel(p Platform, msg *Message, args []string) {
 			models := switcher.AvailableModels(fetchCtx)
 
 			var sb strings.Builder
+			if msg.SharedScope != "" {
+				sb.WriteString(e.i18n.T(MsgSharedSettingsScope) + "\n\n")
+			}
 			current := switcher.GetModel()
 			if current == "" {
 				sb.WriteString(e.i18n.T(MsgModelDefault))
@@ -10053,6 +10075,10 @@ func (e *Engine) cmdModel(p Platform, msg *Message, args []string) {
 	target, err = e.switchModelOnAgent(agent, target, agent == e.agent)
 	if err != nil {
 		e.reply(p, msg.ReplyCtx, e.i18n.Tf(MsgModelChangeFailed, err))
+		return
+	}
+	if msg.SharedScope != "" {
+		e.reply(p, msg.ReplyCtx, e.i18n.Tf(MsgModelChanged, target)+"\n"+e.i18n.T(MsgSharedSettingsScope))
 		return
 	}
 	e.persistWorkspaceModelOverride(interactiveKey, msg.SessionKey, agent, target)
@@ -10196,6 +10222,9 @@ func (e *Engine) cmdReasoning(p Platform, msg *Message, args []string) {
 			efforts := switcher.AvailableReasoningEfforts()
 
 			var sb strings.Builder
+			if msg.SharedScope != "" {
+				sb.WriteString(e.i18n.T(MsgSharedSettingsScope) + "\n\n")
+			}
 			current := switcher.GetReasoningEffort()
 			if current == "" {
 				sb.WriteString(e.i18n.T(MsgReasoningDefault))
@@ -10255,6 +10284,10 @@ func (e *Engine) cmdReasoning(p Platform, msg *Message, args []string) {
 	}
 
 	switcher.SetReasoningEffort(target)
+	if msg.SharedScope != "" {
+		e.reply(p, msg.ReplyCtx, e.i18n.Tf(MsgReasoningChanged, target)+"\n"+e.i18n.T(MsgSharedSettingsScope))
+		return
+	}
 	e.cleanupInteractiveState(e.interactiveKeyForSessionKey(msg.SessionKey))
 
 	s := sessions.GetOrCreateActive(msg.SessionKey)
@@ -10283,6 +10316,9 @@ func (e *Engine) cmdMode(p Platform, msg *Message, args []string) {
 			current := switcher.GetMode()
 			modes := switcher.PermissionModes()
 			var sb strings.Builder
+			if msg.SharedScope != "" {
+				sb.WriteString(e.i18n.T(MsgSharedSettingsScope) + "\n\n")
+			}
 			zhLike := e.i18n.IsZhLike()
 			for _, m := range modes {
 				suffix := ""
@@ -10327,9 +10363,12 @@ func (e *Engine) cmdMode(p Platform, msg *Message, args []string) {
 	target := strings.ToLower(args[0])
 	switcher.SetMode(target)
 	newMode := switcher.GetMode()
-	appliedLive := e.applyLiveModeChange(msg.SessionKey, newMode)
+	appliedLive := false
+	if msg.SharedScope == "" {
+		appliedLive = e.applyLiveModeChange(msg.SessionKey, newMode)
+	}
 
-	if !appliedLive {
+	if !appliedLive && msg.SharedScope == "" {
 		e.cleanupInteractiveState(e.interactiveKeyForSessionKey(msg.SessionKey))
 	}
 
@@ -10347,6 +10386,9 @@ func (e *Engine) cmdMode(p Platform, msg *Message, args []string) {
 		}
 	}
 	reply := fmt.Sprintf(e.i18n.T(MsgModeChanged), displayName)
+	if msg.SharedScope != "" {
+		reply += "\n" + e.i18n.T(MsgSharedSettingsScope)
+	}
 	if appliedLive {
 		reply += "\n\n(Current session updated immediately.)"
 	}
@@ -16697,6 +16739,10 @@ func (e *Engine) commandContext(p Platform, msg *Message) (Agent, *SessionManage
 // the resolved workspace path for callers that need to forward it to
 // processInteractiveMessageWith (idle reaper bookkeeping, reply footer, etc).
 func (e *Engine) commandContextWithWorkspace(p Platform, msg *Message) (Agent, *SessionManager, string, string, error) {
+	// Shared requests execute on the project agent, independent of legacy bindings.
+	if msg.SharedScope != "" {
+		return e.agent, e.sessions, msg.SessionKey, "", nil
+	}
 	if !e.multiWorkspace {
 		return e.agent, e.sessions, msg.SessionKey, "", nil
 	}
