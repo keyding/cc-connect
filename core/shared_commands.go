@@ -45,7 +45,7 @@ func (e *Engine) sharedMenuCommands() []BotCommandInfo {
 	defer e.userRolesMu.RUnlock()
 	var commands []BotCommandInfo
 	for _, cmd := range sharedCommandSpecs {
-		if !e.disabledCmds[cmd.name] {
+		if !e.disabledCmds[cmd.name] && cmd.name != "approve" && cmd.name != "deny" && cmd.name != "answer" {
 			commands = append(commands, BotCommandInfo{Command: cmd.name, Description: e.i18n.T(cmd.description)})
 		}
 	}

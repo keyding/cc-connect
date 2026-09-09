@@ -42,9 +42,14 @@ func TestSharedCommandMenuIncludesControlsAndDescriptions(t *testing.T) {
 	for _, c := range commands {
 		got[c.Command] = c.Description
 	}
-	for _, name := range []string{"history", "queue", "cancel", "stop", "resume", "resolve", "continue", "delete", "approve", "deny", "answer", "help"} {
+	for _, name := range []string{"history", "queue", "cancel", "stop", "resume", "resolve", "continue", "delete", "help"} {
 		if got[name] == "" || got[name] == name {
 			t.Errorf("missing command description: %s", name)
+		}
+	}
+	for _, name := range []string{"approve", "deny", "answer"} {
+		if got[name] != "" || !isSharedCommand(name) {
+			t.Fatalf("%s must stay callable but hidden from the menu", name)
 		}
 	}
 }

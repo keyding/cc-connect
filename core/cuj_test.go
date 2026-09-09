@@ -3435,6 +3435,8 @@ func TestCUJ_B17_UncertainAdmissionFencesExecutionAndProvidesStableLookup(t *tes
 }
 
 func TestCUJ_B20_InitiatorNonceQuestionsAndDefaultIndependence(t *testing.T) {
+	t.Run("replies target individual questions", sharedQuestionReplies)
+	t.Run("expired question replies", sharedQuestionReplyInvalidation)
 	a := &interactionTestAgent{queueTestAgent: queueTestAgent{dir: t.TempDir(), calls: make(chan *queueTestSession, 10)}, decisions: make(chan interactionDecision, 10)}
 	p := &interactionTestPlatform{linkTestPlatform: linkTestPlatform{queueTestPlatform: queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}}}
 	e := NewEngine("project", a, []Platform{p}, filepath.Join(t.TempDir(), "sessions"), LangEnglish)

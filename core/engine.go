@@ -2931,6 +2931,16 @@ func (e *Engine) handleMessage(p Platform, msg *Message) {
 			return
 		}
 		content := e.resolveAlias(strings.TrimSpace(msg.Content))
+		// Replies to a question are answers, including paths beginning with /.
+		// Recognized control commands remain available as explicit commands.
+		command := ""
+		if fields := strings.Fields(content); len(fields) > 0 && strings.HasPrefix(fields[0], "/") {
+			command = strings.SplitN(strings.TrimPrefix(fields[0], "/"), "@", 2)[0]
+		}
+		if msg.BotReply != nil && !isSharedCommand(command) && e.sharedDirectory.isInteractionMessage(e.name, msg.Platform, msg.SharedScope, *msg.BotReply) {
+			e.replySharedInteraction(p, msg)
+			return
+		}
 		if strings.HasPrefix(content, "/") {
 			e.handleCommand(p, msg, content)
 		} else {
