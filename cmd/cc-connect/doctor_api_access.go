@@ -50,7 +50,7 @@ func probeIsolatedAPI() error {
 	if err != nil {
 		return fmt.Errorf("connect to %s: %w; check ancestor traversal, api_socket_group and restart the service", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("API access returned HTTP %d", resp.StatusCode)
 	}
