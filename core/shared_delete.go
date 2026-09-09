@@ -17,6 +17,7 @@ func (e *Engine) handleSharedDelete(p Platform, msg *Message, args []string) {
 	key := sharedScopeKey(e.name, msg.Platform, msg.SharedScope)
 	scope, _, err := e.sharedDirectory.apply(key, msg.SessionKey, e.agent.Name(), "", "")
 	if err != nil {
+		slog.Error("load shared directory for deletion", "error", err)
 		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgSharedUnavailable))
 		return
 	}
