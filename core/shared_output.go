@@ -120,6 +120,8 @@ func (e *Engine) startSharedAgent(ctx context.Context, r sharedRequest) (AgentSe
 		env := []string{"CC_PROJECT=" + e.name, "CC_SESSION_KEY=shared-request:" + r.ID, "CC_DATA_DIR=" + e.dataDir}
 		if exe, err := os.Executable(); err == nil {
 			env = append(env, "PATH="+filepath.Dir(exe)+string(filepath.ListSeparator)+os.Getenv("PATH"))
+		} else {
+			slog.Warn("locate shared executor output helper", "error", err)
 		}
 		return starter.StartSessionWithEnv(ctx, r.HistoryID, env)
 	}

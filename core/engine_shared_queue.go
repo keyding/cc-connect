@@ -196,19 +196,9 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 	defer func() {
 		history = as.CurrentSessionID()
 		var settleErr error
-		exited, settleErr = settleSharedAgent(as)
-		if exited {
-			groupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			groupErr := waitSharedExecutorGroup(groupCtx, q.executorGroup(r.ID))
-			cancel()
-			if groupErr != nil {
-				exited = false
-				settleErr = errors.Join(settleErr, groupErr)
-			}
-		}
+		exited, settleErr = q.settleSharedRequestAgent(r.ID, as)
 		err = errors.Join(err, settleErr)
 	}()
-
 	if err := ctx.Err(); err != nil {
 		return "", "", false, err
 	}
@@ -217,15 +207,35 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 		sendDone <- as.Send(e.buildSenderPrompt(r.Content, r.UserID, r.UserName, r.Platform, r.Entry, ""), r.ID, r.Images, r.Files)
 	}()
 	var idle *time.Timer
-	var idleCh <-chan time.Time
 	if e.eventIdleTimeout > 0 {
 		idle = time.NewTimer(e.eventIdleTimeout)
-		idleCh = idle.C
 		defer idle.Stop()
 	}
 	preview := e.sharedPreview(r, ctx)
 	if preview != nil {
 		defer preview.discard()
+	}
+	result, err = e.collectSharedAgentOutput(ctx, r, as, sendDone, idle, preview)
+	return result, "", false, err
+}
+
+func (q *sharedQueue) settleSharedRequestAgent(id string, as AgentSession) (bool, error) {
+	exited, err := settleSharedAgent(as)
+	if exited {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if groupErr := waitSharedExecutorGroup(ctx, q.executorGroup(id)); groupErr != nil {
+			exited = false
+			err = errors.Join(err, groupErr)
+		}
+	}
+	return exited, err
+}
+
+func (e *Engine) collectSharedAgentOutput(ctx context.Context, r sharedRequest, as AgentSession, sendDone <-chan error, idle *time.Timer, preview *streamPreview) (string, error) {
+	var idleCh <-chan time.Time
+	if idle != nil {
+		idleCh = idle.C
 	}
 	var pending *sharedInteraction
 	defer func() { e.endSharedInteraction(pending) }()
@@ -236,7 +246,7 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 		select {
 		case decision := <-decisions:
 			if err := e.deliverSharedInteraction(ctx, r, pending, decision, as); err != nil {
-				return texts.String(), "", false, err
+				return texts.String(), err
 			}
 			pending = nil
 			decisions = nil
@@ -245,20 +255,20 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 				idleCh = idle.C
 			}
 		case <-ctx.Done():
-			return texts.String(), "", false, ctx.Err()
+			return texts.String(), ctx.Err()
 		case sendErr := <-sendDone:
 			sendDone = nil
 			if sendErr != nil {
-				return texts.String(), "", false, sendErr
+				return texts.String(), sendErr
 			}
 		case <-idleCh:
-			return texts.String(), "", false, fmt.Errorf("agent event idle timeout")
+			return texts.String(), fmt.Errorf("agent event idle timeout")
 		case event, ok := <-as.Events():
 			if idle != nil && pending == nil {
 				idle.Reset(e.eventIdleTimeout)
 			}
 			if !ok {
-				return texts.String(), "", false, fmt.Errorf("agent ended without reliable result")
+				return texts.String(), fmt.Errorf("agent ended without reliable result")
 			}
 			switch event.Type {
 			case EventText:
@@ -270,49 +280,53 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 			case EventToolUse:
 				e.sharedReply(r, e.i18n.Tf(MsgSharedProgress, event.ToolName))
 			case EventError:
-				return texts.String(), "", false, fmt.Errorf("agent execution failed: %v", event.Error)
+				return texts.String(), fmt.Errorf("agent execution failed: %v", event.Error)
 			case EventPermissionRequest:
 				if idle != nil {
 					idle.Stop()
 					idleCh = nil
 				}
 				if pending != nil {
-					return texts.String(), "", false, fmt.Errorf("agent issued overlapping interactions")
+					return texts.String(), fmt.Errorf("agent issued overlapping interactions")
 				}
 				var interactionErr error
 				pending, interactionErr = e.beginSharedInteraction(ctx, r, event)
 				if interactionErr != nil {
-					return texts.String(), "", false, interactionErr
+					return texts.String(), interactionErr
 				}
 				decisions = pending.decisions
 			case EventResult:
 				if pending != nil {
-					return texts.String(), "", false, fmt.Errorf("agent ended before interaction was resolved")
+					return texts.String(), fmt.Errorf("agent ended before interaction was resolved")
 				}
 				if event.Error != nil {
-					return texts.String(), "", false, event.Error
+					return texts.String(), event.Error
 				}
 				if !event.Done {
 					continue
 				}
-				if sendDone != nil {
-					select {
-					case sendErr := <-sendDone:
-						if sendErr != nil {
-							return texts.String(), "", false, sendErr
-						}
-						sendDone = nil
-					case <-ctx.Done():
-						return texts.String(), "", false, ctx.Err()
-					}
-				}
-				if event.Content != "" {
-					return event.Content, "", false, nil
-				}
-				return texts.String(), "", false, nil
+				return completeSharedAgentOutput(ctx, sendDone, event.Content, texts.String())
 			}
 		}
 	}
+}
+
+// A result is reliable only after the initial Send call has also succeeded.
+func completeSharedAgentOutput(ctx context.Context, sendDone <-chan error, result, texts string) (string, error) {
+	if sendDone != nil {
+		select {
+		case err := <-sendDone:
+			if err != nil {
+				return texts, err
+			}
+		case <-ctx.Done():
+			return texts, ctx.Err()
+		}
+	}
+	if result != "" {
+		return result, nil
+	}
+	return texts, nil
 }
 
 // Settlement must preserve all failure causes and prove OS teardown before unlock.
