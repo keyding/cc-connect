@@ -128,3 +128,24 @@ func TestSharedInteraction_TextQuestionOmitsEmptyKeyboardHTTP(t *testing.T) {
 		})
 	}
 }
+
+func TestSharedInteraction_AnswerEditClearsKeyboardHTTP(t *testing.T) {
+	p := newTelegramTestPlatform(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Error(err)
+		}
+		if !strings.HasSuffix(r.URL.Path, "/editMessageText") || r.FormValue("chat_id") != "-100" || r.FormValue("message_id") != "101" {
+			t.Error("wrong edit destination")
+		}
+		if r.FormValue("reply_markup") != `{"inline_keyboard":[]}` {
+			t.Errorf("keyboard not cleared: %s", r.FormValue("reply_markup"))
+		}
+		if r.FormValue("parse_mode") != "" || r.FormValue("text") != "Theme?\n\n✅ Answered: <dark>" {
+			t.Error("answer text changed")
+		}
+		fmt.Fprint(w, `{"ok":true,"result":{"message_id":101,"chat":{"id":-100,"type":"supergroup"}}}`)
+	})
+	if err := p.UpdateInteractionMessage(context.Background(), core.MessageReference{Scope: "-100", MessageID: "101"}, "Theme?\n\n✅ Answered: <dark>"); err != nil {
+		t.Fatal(err)
+	}
+}
