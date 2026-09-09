@@ -15,15 +15,20 @@ func (e *Engine) replySharedHistory(p Platform, msg *Message, session sharedSess
 			limit = n
 		}
 	}
-	var entries []string
+	type entry struct{ turn, text string }
+	var entries []entry
 	e.sharedQueue.mu.Lock()
 	for _, r := range e.sharedQueue.requests {
 		if r.Session.ID != session.ID || r.Scope != msg.SharedScope || r.Platform != msg.Platform || r.Status != "completed" {
 			continue
 		}
-		entries = append(entries, "👤 "+truncateHistoryEntry(r.Content, e.historyEntryMaxLen()))
+		entries = append(entries, entry{r.ID, e.sharedHistoryUser(r)})
 		if r.Result != "" {
-			entries = append(entries, "🤖 "+truncateHistoryEntry(r.Result, e.historyEntryMaxLen()))
+			bot := r.BotDisplayName
+			if bot == "" {
+				bot = e.i18n.T(MsgHistoryBot)
+			}
+			entries = append(entries, entry{r.ID, "**🤖 " + sharedDisplayLabel(bot) + " · " + e.sharedHistoryTime(r.CompletedAtMs) + "**\n\n" + truncateHistoryEntry(r.Result, e.historyEntryMaxLen())})
 		}
 	}
 	e.sharedQueue.mu.Unlock()
@@ -34,5 +39,12 @@ func (e *Engine) replySharedHistory(p Platform, msg *Message, session sharedSess
 	if len(entries) > limit {
 		entries = entries[len(entries)-limit:]
 	}
-	e.reply(p, msg.ReplyCtx, fmt.Sprintf("%s\n\n%s", e.i18n.Tf(MsgSharedHistoryHeader, session.Name, len(entries)), strings.Join(entries, "\n\n")))
+	var rendered []string
+	for i, row := range entries {
+		if i > 0 && row.turn != entries[i-1].turn {
+			rendered = append(rendered, "────────────")
+		}
+		rendered = append(rendered, row.text)
+	}
+	e.reply(p, msg.ReplyCtx, fmt.Sprintf("%s\n%s\n\n%s", sharedSessionTitle(session.Name), e.i18n.Tf(MsgSharedHistoryHeader, len(entries)), strings.Join(rendered, "\n\n")))
 }

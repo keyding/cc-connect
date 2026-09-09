@@ -26,7 +26,14 @@ func (e *Engine) acceptSharedRequest(p Platform, msg *Message, s sharedSession) 
 		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgSharedNotAccepted))
 		return
 	}
-	r := sharedRequest{Session: s, Platform: p.Name(), Scope: msg.SharedScope, Entry: msg.SessionKey, UserID: msg.UserID, UserName: msg.UserName, MessageID: msg.MessageID, Content: strings.TrimSpace(msg.ExtraContent + "\n" + msg.Content), WorkDir: dir, Reply: reply, Images: msg.Images, Files: msg.Files}
+	body := msg.Content
+	var quote *QuotedMessage
+	if msg.QuotedMessage != nil {
+		copied := *msg.QuotedMessage
+		copied.Text = historyQuoteExcerpt(copied.Text)
+		quote = &copied
+	}
+	r := sharedRequest{UserContent: &body, UserDisplayName: msg.UserDisplayName, BotDisplayName: msg.BotDisplayName, QuotedMessage: quote, SentAtMs: msg.UserMessageTimeMs, Session: s, Platform: p.Name(), Scope: msg.SharedScope, Entry: msg.SessionKey, UserID: msg.UserID, UserName: msg.UserName, MessageID: msg.MessageID, Content: strings.TrimSpace(msg.ExtraContent + "\n" + msg.Content), WorkDir: dir, Reply: reply, Images: msg.Images, Files: msg.Files}
 	if msg.Audio != nil {
 		format := filepath.Base(msg.Audio.Format)
 		if format == "." || format == "" {

@@ -2493,7 +2493,7 @@ func TestCUJ_B14_SharedDirectoryAcrossTopicsAndRestart(t *testing.T) {
 	if got := send("alice", "one", "/new Alpha"); !strings.Contains(got, "Alpha") {
 		t.Fatal(got)
 	}
-	if got := send("bob", "two", "/list"); !strings.Contains(got, "1. Alpha") {
+	if got := send("bob", "two", "/list"); !strings.Contains(got, "1. 💬 **「Alpha」**") {
 		t.Fatal(got)
 	}
 	if got := send("bob", "two", "/switch 1"); !strings.Contains(got, "Alpha") {
@@ -2542,7 +2542,7 @@ func TestCUJ_B14_SharedSelectionModesAndIsolation(t *testing.T) {
 			if !strings.Contains(first, "Alpha") {
 				t.Fatal(first)
 			}
-			id := first[strings.LastIndex(first, "(")+1 : strings.LastIndex(first, ")")]
+			id := strings.Trim(first[strings.LastIndex(first, "(")+1:strings.LastIndex(first, ")")], "`")
 			send("bob", "two", "group", "/switch 1")
 			send("alice", "one", "group", "/new Beta")
 			expected := "/new"
@@ -2619,7 +2619,7 @@ func TestCUJ_B14_SharedNamesAreAtomic(t *testing.T) {
 	send("bob", "/name alpha")
 	send("bob", "/current")
 	got := strings.Join(p.getSent()[before:], "\n")
-	if !strings.Contains(got, "already exists") || !strings.Contains(got, "Current: Beta") {
+	if !strings.Contains(got, "already exists") || !strings.Contains(got, "Current: 💬 **「Beta」**") {
 		t.Fatal(got)
 	}
 	send("bob", "/new")
@@ -2627,7 +2627,7 @@ func TestCUJ_B14_SharedNamesAreAtomic(t *testing.T) {
 	before = len(p.getSent())
 	send("alice", "/list")
 	got = strings.Join(p.getSent()[before:], "\n")
-	for _, want := range []string{"1. ALpha", "2. Beta", "3. session-3", "4. session-4"} {
+	for _, want := range []string{"1. 💬 **「ALpha」**", "2. 💬 **「Beta」**", "3. 💬 **「session-3」**", "4. 💬 **「session-4」**"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %s: %s", want, got)
 		}
@@ -2637,7 +2637,7 @@ func TestCUJ_B14_SharedNamesAreAtomic(t *testing.T) {
 	send("bob", "/name Gamma")
 	send("alice", "/switch 2")
 	got = strings.Join(p.getSent()[before:], "\n")
-	if !strings.Contains(got, "Current: ALpha") || !strings.Contains(got, "Current: Beta") {
+	if !strings.Contains(got, "Current: 💬 **「ALpha」**") || !strings.Contains(got, "Current: 💬 **「Beta」**") {
 		t.Fatal(got)
 	}
 }
@@ -2675,7 +2675,7 @@ func TestCUJ_B14_SharedDirectoryWriteFailureDoesNotChangeSelection(t *testing.T)
 	if got := send("/list"); strings.Contains(got, "Beta") {
 		t.Fatal(got)
 	}
-	if got := send("/new Beta"); !strings.Contains(got, "Current: Beta") {
+	if got := send("/new Beta"); !strings.Contains(got, "Current: 💬 **「Beta」**") {
 		t.Fatal(got)
 	}
 }
@@ -3830,6 +3830,7 @@ func TestCUJ_B19_SharedReplyPreservesModelAndContextFooter(t *testing.T) {
 }
 
 func TestCUJ_B14_SharedHistoryAndSelectionAcrossRestart(t *testing.T) {
+	t.Run("presentation", sharedHistoryPresentationAcrossRestart)
 	a := &queueTestAgent{dir: t.TempDir(), calls: make(chan *queueTestSession, 10)}
 	p := &queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}
 	path := filepath.Join(t.TempDir(), "sessions")
@@ -3851,7 +3852,7 @@ func TestCUJ_B14_SharedHistoryAndSelectionAcrossRestart(t *testing.T) {
 
 	queueMessage(e, p, "bob", "5", "/list")
 	sent = p.getSent()
-	if !strings.Contains(sent[len(sent)-1], "👉 1. Alpha") {
+	if !strings.Contains(sent[len(sent)-1], "👉 1. 💬 **「Alpha」**") {
 		t.Fatal(sent[len(sent)-1])
 	}
 	if err := e.Stop(); err != nil {
@@ -3876,5 +3877,56 @@ func TestCUJ_B14_SharedHistoryAndSelectionAcrossRestart(t *testing.T) {
 	sent = p.getSent()
 	if strings.Contains(sent[len(sent)-1], "alpha") {
 		t.Fatal("history leaked across groups")
+	}
+}
+
+func sharedHistoryPresentationAcrossRestart(t *testing.T) {
+	a := &queueTestAgent{dir: t.TempDir(), calls: make(chan *queueTestSession, 10)}
+	p := &queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}
+	path := filepath.Join(t.TempDir(), "sessions")
+	e := NewEngine("project", a, []Platform{p}, path, LangChinese)
+	t.Cleanup(func() { _ = e.Stop() })
+	queueMessage(e, p, "alice", "1", "/new Weather")
+	queueMessage(e, p, "bob", "2", "/switch 1")
+	for i, user := range []string{"alice", "bob"} {
+		m := &Message{Platform: "test", SharedScope: "group", SessionKey: user, UserID: user, UserDisplayName: user + " display", BotDisplayName: "Weather Bot", MessageID: fmt.Sprint(i + 3), Content: user + " own message", ReplyCtx: user, UserMessageTimeMs: time.Date(2026, 9, 9, 2, 35, 24+i, 0, time.UTC).UnixMilli()}
+		if i == 1 {
+			m.ExtraContent = "[Reply to Weather Bot]: full original answer"
+			m.QuotedMessage = &QuotedMessage{Author: "Weather Bot", Text: "short quotation\nSources:\nlarge sources", URL: "https://t.me/c/123/20"}
+		}
+		e.ReceiveMessage(p, m)
+		session := nextQueueSession(t, a)
+		prompt := <-session.sent
+		if i == 1 && !strings.Contains(prompt, "full original answer") {
+			t.Fatal("agent lost quote context")
+		}
+		session.events <- Event{Type: EventResult, Done: true, Content: user + " answer"}
+		waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), user+" answer") })
+	}
+	read := func() string {
+		queueMessage(e, p, "bob", "history", "/history")
+		sent := p.getSent()
+		return sent[len(sent)-1]
+	}
+	before := read()
+	for _, want := range []string{"💬 **「Weather」**", "👤 alice display", "👤 bob display", "🤖 Weather Bot", "2026-09-09 10:35:24 (UTC+8)", "2026-09-09 10:35:25 (UTC+8)", "↪ 回复 Weather Bot", "查看原消息"} {
+		if !strings.Contains(before, want) {
+			t.Fatalf("missing %s: %s", want, before)
+		}
+	}
+	if strings.Count(before, "────────────") != 1 || strings.Contains(before, "时间未知") || strings.Contains(before, "full original answer") || strings.Contains(before, "large sources") || strings.Index(before, "bob own message") > strings.Index(before, "↪ 回复 Weather Bot") {
+		t.Fatal(before)
+	}
+	if err := e.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	e = NewEngine("project", a, []Platform{p}, path, LangChinese)
+	if after := read(); after != before {
+		t.Fatalf("history changed on restart:\nbefore %s\nafter %s", before, after)
+	}
+	queueMessage(e, p, "bob", "queue", "/queue")
+	sent := p.getSent()
+	if got := sent[len(sent)-1]; !strings.Contains(got, "💬 **「Weather」**") || !strings.Contains(got, "bob display") {
+		t.Fatal(got)
 	}
 }

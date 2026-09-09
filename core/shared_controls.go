@@ -143,9 +143,9 @@ func queueStatusKey(status string) MsgKey {
 }
 
 func (e *Engine) sharedQueueView(q *sharedQueue, s sharedSession) string {
-	lines := []string{e.i18n.Tf(MsgQueueTitle, s.Name, s.ID)}
+	lines := []string{e.i18n.Tf(MsgQueueTitle, sharedSessionTitle(s.Name)+"\n", "`"+s.ID+"`")}
 	if r := q.uncertainAdmission; r != nil && r.Session.ID == s.ID {
-		lines = append(lines, e.i18n.Tf(MsgQueueEntry, r.ID, r.UserID, e.i18n.T(MsgRecoveryAdmissionStatus)))
+		lines = append(lines, e.i18n.Tf(MsgQueueEntry, r.ID, sharedUserLabel(*r), e.i18n.T(MsgRecoveryAdmissionStatus)))
 	}
 	if q.paused {
 		lines = append(lines, e.i18n.T(MsgSharedPaused))
@@ -158,7 +158,7 @@ func (e *Engine) sharedQueueView(q *sharedQueue, s sharedSession) string {
 		if r.Waiting && r.Status == "running" {
 			status = e.i18n.T(MsgInteractionWaiting)
 		}
-		line := e.i18n.Tf(MsgQueueEntry, r.ID, r.UserID, status)
+		line := e.i18n.Tf(MsgQueueEntry, r.ID, sharedUserLabel(r), status)
 		if r.Status == "queued" {
 			line += "\n/cancel " + r.ID
 		}
