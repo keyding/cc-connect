@@ -761,7 +761,51 @@ const (
 	MsgInteractionDeny        MsgKey = "shared_interaction_deny"
 )
 
+const (
+	MsgSharedAccessDenied  MsgKey = "SharedAccessDenied"
+	MsgSharedDeleteBusy    MsgKey = "SharedDeleteBusy"
+	MsgSharedDeleteConfirm MsgKey = "SharedDeleteConfirm"
+	MsgSharedDeleted       MsgKey = "SharedDeleted"
+)
+
+const (
+	MsgSharedAccessSaveFailed      MsgKey = "SharedAccessSaveFailed"
+	MsgSharedAccessReconcileFailed MsgKey = "SharedAccessReconcileFailed"
+)
+
 var messages = map[MsgKey]map[Language]string{
+	MsgSharedAccessSaveFailed:      {LangEnglish: "Could not persist authorization settings.", LangChinese: "无法保存授权设置。", LangTraditionalChinese: "無法儲存授權設定。", LangJapanese: "権限設定を保存できませんでした。", LangSpanish: "No se pudo guardar la configuración de autorización."},
+	MsgSharedAccessReconcileFailed: {LangEnglish: "Authorization changed; request reconciliation requires attention before execution can resume.", LangChinese: "授权已更改；恢复执行前需要处理请求状态保存失败。", LangTraditionalChinese: "授權已變更；恢復執行前需要處理請求狀態儲存失敗。", LangJapanese: "権限を変更しました。実行再開前にリクエスト状態の保存失敗に対応してください。", LangSpanish: "Autorización modificada; la conciliación de solicitudes requiere atención antes de reanudar la ejecución."},
+
+	MsgSharedAccessDenied: {
+		LangEnglish:            "Access denied. Current authorization is required.",
+		LangChinese:            "访问被拒绝：需要当前授权。",
+		LangTraditionalChinese: "存取遭拒：需要目前授權。",
+		LangJapanese:           "アクセスできません。現在の権限が必要です。",
+		LangSpanish:            "Acceso denegado. Se requiere autorización vigente.",
+	},
+	MsgSharedDeleteBusy: {
+		LangEnglish:            "Session cannot be deleted while requests or interruption handling remain, or storage state is uncertain. Use /queue to inspect.",
+		LangChinese:            "会话仍有请求、待处理中断或存储状态不确定，不能删除。请用 /queue 查看。",
+		LangTraditionalChinese: "會話仍有請求、待處理中斷或儲存狀態不確定，不能刪除。請用 /queue 查看。",
+		LangJapanese:           "依頼、中断処理または保存状態の不確実性があるため削除できません。/queue で確認してください。",
+		LangSpanish:            "No se puede eliminar la sesión con solicitudes, interrupciones pendientes o almacenamiento incierto. Consulta /queue.",
+	},
+	MsgSharedDeleteConfirm: {
+		LangEnglish:            "Delete shared session %s (%s)? Existing code, worktrees and agent history will be preserved. Confirm this specific session: /delete %s confirm",
+		LangChinese:            "删除共享会话 %s（%s）？现有代码、worktree 和 Agent 历史将保留。确认删除此会话：/delete %s confirm",
+		LangTraditionalChinese: "刪除共享會話 %s（%s）？現有程式碼、worktree 和 Agent 歷史將保留。確認刪除此會話：/delete %s confirm",
+		LangJapanese:           "共有会話 %s（%s）を削除しますか？コード、worktree、エージェント履歴は保持します。この会話の削除を確認: /delete %s confirm",
+		LangSpanish:            "¿Eliminar la sesión compartida %s (%s)? Se conservarán el código, los worktrees y el historial del agente. Confirma esta sesión: /delete %s confirm",
+	},
+	MsgSharedDeleted: {
+		LangEnglish:            "Deleted shared session %s (%s). Old message references are invalid. Existing code and agent history were preserved.",
+		LangChinese:            "已删除共享会话 %s（%s）。旧消息引用已失效，现有代码和 Agent 历史保留。",
+		LangTraditionalChinese: "已刪除共享會話 %s（%s）。舊訊息引用已失效，現有程式碼和 Agent 歷史保留。",
+		LangJapanese:           "共有会話 %s（%s）を削除しました。古いメッセージ参照は無効です。コードとエージェント履歴は保持しました。",
+		LangSpanish:            "Sesión compartida %s (%s) eliminada. Las referencias antiguas ya no son válidas. Código e historial del agente conservados.",
+	},
+
 	MsgInteractionPrompt: {
 		LangEnglish:            "Session %s · requester %s · waiting for interaction: %s",
 		LangChinese:            "会话 %s · 发起人 %s · 等待交互：%s",
@@ -1096,11 +1140,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "La ejecución compartida no está disponible en esta vista previa. La tarea no se aceptó ni guardó.",
 	},
 	MsgSharedCommands: {
-		LangEnglish:            "Shared mode supports /new, /list, /switch, /name and /current, /queue, /cancel, /stop, /resume, /resolve, /continue.",
-		LangChinese:            "共享模式支持 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume, /resolve, /continue。",
-		LangTraditionalChinese: "共享模式支援 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume, /resolve, /continue。",
-		LangJapanese:           "共有モードは /new、/list、/switch、/name、/current, /queue, /cancel, /stop, /resume, /resolve, /continue に対応しています。",
-		LangSpanish:            "El modo compartido admite /new, /list, /switch, /name y /current, /queue, /cancel, /stop, /resume, /resolve, /continue.",
+		LangEnglish:            "Shared mode supports /new, /list, /switch, /name and /current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete.",
+		LangChinese:            "共享模式支持 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete。",
+		LangTraditionalChinese: "共享模式支援 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete。",
+		LangJapanese:           "共有モードは /new、/list、/switch、/name、/current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete に対応しています。",
+		LangSpanish:            "El modo compartido admite /new, /list, /switch, /name y /current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete.",
 	},
 
 	MsgStarting: {

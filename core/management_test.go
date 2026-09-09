@@ -3010,3 +3010,38 @@ func TestMgmt_SetupWeixinPoll_RejectsMalformedAPIURL(t *testing.T) {
 		}
 	}
 }
+
+func TestMgmt_ProjectAllowlistChangesApplyLiveOnlyAfterSuccessfulSave(t *testing.T) {
+	mgmt, ts, e := testManagementServer(t, "tok")
+	p := &mutableSharedPlatform{interactionTestPlatform: interactionTestPlatform{linkTestPlatform: linkTestPlatform{queueTestPlatform: queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}}}, allow: "alice,bob"}
+	e.platforms = []Platform{p}
+	send := func(user, content string) string {
+		before := len(p.getSent())
+		e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: user, UserID: user, Content: content})
+		return strings.Join(p.getSent()[before:], "\n")
+	}
+	send("alice", "/new Alpha")
+	saved := ""
+	mgmt.SetSaveProjectSettings(func(_ string, update ProjectSettingsUpdate) error {
+		saved = update.PlatformAllowFrom["test"]
+		return nil
+	})
+	result := mgmtPatch(t, ts.URL+"/api/v1/projects/test-project", "tok", map[string]any{"platform_allow_from": map[string]string{"test": "bob"}})
+	if !result.OK || saved != "bob" {
+		t.Fatalf("patch failed: %+v saved=%q", result, saved)
+	}
+	if got := send("alice", "/list"); !strings.Contains(got, e.i18n.T(MsgSharedAccessDenied)) || strings.Contains(got, "Alpha") {
+		t.Fatal(got)
+	}
+	if got := send("bob", "/list"); !strings.Contains(got, "Alpha") {
+		t.Fatal(got)
+	}
+	mgmt.SetSaveProjectSettings(func(string, ProjectSettingsUpdate) error { return errors.New("disk failure") })
+	result = mgmtPatch(t, ts.URL+"/api/v1/projects/test-project", "tok", map[string]any{"platform_allow_from": map[string]string{"test": "alice,bob"}})
+	if result.OK {
+		t.Fatal("failed config write falsely reported success")
+	}
+	if got := send("alice", "/list"); !strings.Contains(got, e.i18n.T(MsgSharedAccessDenied)) {
+		t.Fatal(got)
+	}
+}

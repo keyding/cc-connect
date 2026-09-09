@@ -59,6 +59,11 @@ func (e *Engine) beginSharedInteraction(ctx context.Context, r sharedRequest, ev
 	}
 	q := e.sharedQueue
 	q.mu.Lock()
+	current := q.requests[indexOfSharedRequest(q.requests, r.ID)]
+	if current.Status != "running" || !current.Waiting || ctx.Err() != nil || !e.sharedInteractionAuthorized(r) {
+		q.mu.Unlock()
+		return nil, fmt.Errorf("interaction was revoked before publication")
+	}
 	if q.interactions == nil {
 		q.interactions = map[string]*sharedInteraction{}
 	}
@@ -257,4 +262,18 @@ func (q *sharedQueue) invalidateInteractionsLocked(requestID string) {
 			delete(q.interactions, token)
 		}
 	}
+}
+
+// Authorization changes and delivery of an accepted decision share an operation
+// boundary: a policy update cannot complete while an old decision is forwarded.
+func (e *Engine) deliverSharedInteraction(ctx context.Context, r sharedRequest, pending *sharedInteraction, decision PermissionResult, as AgentSession) error {
+	e.sharedMutationMu.Lock()
+	defer e.sharedMutationMu.Unlock()
+	if ctx.Err() != nil || !e.sharedInteractionAuthorized(r) {
+		return fmt.Errorf("interaction no longer authorized")
+	}
+	if err := e.sharedQueue.setWaiting(r.ID, false); err != nil {
+		return err
+	}
+	return as.RespondPermission(pending.event.RequestID, decision)
 }

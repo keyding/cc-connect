@@ -3030,11 +3030,19 @@ func TestCUJ_B16_StoppedQueueSurvivesRestart(t *testing.T) {
 
 type sharedControlTestPlatform struct {
 	queueTestPlatform
+	authMu     sync.Mutex
 	authorized bool
 }
 
 func (p *sharedControlTestPlatform) AuthorizeSharedControl(scope, userID string) bool {
+	p.authMu.Lock()
+	defer p.authMu.Unlock()
 	return p.authorized
+}
+func (p *sharedControlTestPlatform) setAuthorized(value bool) {
+	p.authMu.Lock()
+	p.authorized = value
+	p.authMu.Unlock()
 }
 
 func TestCUJ_B16_ControlRechecksCurrentAuthorization(t *testing.T) {
@@ -3051,16 +3059,14 @@ func TestCUJ_B16_ControlRechecksCurrentAuthorization(t *testing.T) {
 	send("2", "first")
 	first := nextQueueSession(t, a)
 	<-first.sent
-	p.authorized = false
-	if got := send("3", "/stop"); !strings.Contains(got, "current authorization") {
+	p.setAuthorized(false)
+	if got := send("3", "/stop"); !strings.Contains(got, e.i18n.T(MsgSharedAccessDenied)) {
 		t.Fatal(got)
 	}
-	p.authorized = true
-	if got := send("4", "/queue"); !strings.Contains(got, "requester alice — running") {
-		t.Fatal(got)
-	}
-	first.events <- Event{Type: EventResult, Content: "authorized result", Done: true}
-	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "authorized result") })
+	p.setAuthorized(true)
+	waitQueue(t, func() bool { return strings.Contains(send("4", "/queue"), "stopped; queue paused") })
+	noQueueSession(t, a)
+
 }
 
 func TestCUJ_B19_MediaProgressEditsAndCrossTopicReplies(t *testing.T) {
@@ -3535,7 +3541,7 @@ func TestCUJ_B20_RestartTimeoutAndRevokedInteractionEntries(t *testing.T) {
 			got := strings.Join(p.getSent(), "\n")
 			expected := MsgInteractionStale
 			if mode == "revoked" {
-				expected = MsgInteractionDenied
+				expected = MsgSharedAccessDenied
 			}
 			if !strings.Contains(got, e.i18n.T(expected)) || !strings.Contains(got, e.i18n.T(MsgInteractionHint)) {
 				t.Fatal(got)
@@ -3566,5 +3572,221 @@ func TestCUJ_B20_RestartTimeoutAndRevokedInteractionEntries(t *testing.T) {
 			}
 
 		})
+	}
+}
+
+func TestCUJ_B21_RevocationCancelsOwnQueueAndStopsWaitingExecutor(t *testing.T) {
+	dir := t.TempDir()
+	p := &mutableSharedPlatform{interactionTestPlatform: interactionTestPlatform{linkTestPlatform: linkTestPlatform{queueTestPlatform: queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}}}, allow: "alice,bob"}
+	exit := make(chan struct{})
+	a := &interactionTestAgent{queueTestAgent: queueTestAgent{dir: dir, calls: make(chan *queueTestSession, 10), exitRelease: exit}, decisions: make(chan interactionDecision, 10)}
+	e := NewEngine("project", a, []Platform{p}, filepath.Join(t.TempDir(), "state"), LangEnglish)
+	t.Cleanup(func() { _ = e.Stop() })
+	send := func(user, id, text string) string {
+		before := len(p.getSent())
+		e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: user, UserID: user, MessageID: id, Content: text, ReplyCtx: user})
+		return strings.Join(p.getSent()[before:], "\n")
+	}
+	send("alice", "1", "/new Alpha")
+	send("bob", "2", "/switch 1")
+	send("alice", "3", "first")
+	first := nextQueueSession(t, &a.queueTestAgent)
+	<-first.sent
+	send("alice", "4", "cancel revoked queued work")
+	send("bob", "5", "retained Bob work")
+	first.events <- Event{Type: EventPermissionRequest, RequestID: "permission", ToolName: "Bash", ToolInput: "private tool detail"}
+	token := waitInteraction(t, p, 1)
+	if restart, err := e.SetPlatformAllowFrom(map[string]string{"test": "bob"}); err != nil || restart {
+		t.Fatalf("revoke: restart=%v err=%v", restart, err)
+	}
+	for i, command := range []string{"/list", "/switch 1", "/name Leaked", "/approve " + token, "/queue", "/delete"} {
+		got := send("alice", fmt.Sprint(10+i), command)
+		if !strings.Contains(got, e.i18n.T(MsgSharedAccessDenied)) || strings.Contains(got, "Alpha") || strings.Contains(got, "private tool detail") {
+			t.Fatal(got)
+		}
+	}
+	noInteractionDecision(t, a)
+	listing := send("bob", "20", "/queue")
+	if !strings.Contains(listing, "requester alice — cancelled") || !strings.Contains(listing, "stop requested; awaiting exit") || !strings.Contains(listing, "requester bob — queued") {
+		t.Fatal(listing)
+	}
+	if got := send("bob", "21", "/delete"); !strings.Contains(got, e.i18n.T(MsgSharedDeleteBusy)) {
+		t.Fatal(got)
+	}
+	send("bob", "22", "/new Beta")
+	send("bob", "23", "directory conflict")
+	noQueueSession(t, &a.queueTestAgent)
+	close(exit)
+	beta := nextQueueSession(t, &a.queueTestAgent)
+	if got := <-beta.sent; !strings.Contains(got, "directory conflict") {
+		t.Fatal(got)
+	}
+	beta.events <- Event{Type: EventResult, Content: "Beta complete", Done: true}
+	send("bob", "24", "/switch 1")
+	var resume string
+	waitQueue(t, func() bool {
+		resume = sharedControlFromOutput(send("bob", "poll", "/queue"), "/resume ")
+		return resume != ""
+	})
+	send("bob", "25", resume)
+	next := nextQueueSession(t, &a.queueTestAgent)
+	if got := <-next.sent; !strings.Contains(got, "retained Bob work") {
+		t.Fatal(got)
+	}
+	next.events <- Event{Type: EventResult, Content: "Bob complete", Done: true}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "Bob complete") })
+	noQueueSession(t, &a.queueTestAgent)
+}
+
+func TestCUJ_B21_DeleteConfirmationPreservesCodeAndInvalidatesOldReplies(t *testing.T) {
+	dir, path := t.TempDir(), filepath.Join(t.TempDir(), "state")
+	code := filepath.Join(dir, "code.txt")
+	if err := os.WriteFile(code, []byte("keep worktree code"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p := &interactionTestPlatform{linkTestPlatform: linkTestPlatform{queueTestPlatform: queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}}}
+	a := &interactionTestAgent{queueTestAgent: queueTestAgent{dir: dir, calls: make(chan *queueTestSession, 10)}, decisions: make(chan interactionDecision, 10)}
+	e := NewEngine("project", a, []Platform{p}, path, LangEnglish)
+	t.Cleanup(func() { _ = e.Stop() })
+	send := func(user, id, text string, ref *MessageReference) string {
+		before := len(p.getSent())
+		e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: user, UserID: user, MessageID: id, Content: text, ReplyCtx: user, BotReply: ref})
+		return strings.Join(p.getSent()[before:], "\n")
+	}
+	send("alice", "1", "/new Alpha", nil)
+	send("alice", "2", "work", nil)
+	first := nextQueueSession(t, &a.queueTestAgent)
+	<-first.sent
+	first.events <- Event{Type: EventPermissionRequest, RequestID: "delete-test-question", ToolName: "Bash"}
+	token := waitInteraction(t, p, 1)
+	p.receiptMu.Lock()
+	promptRef := p.receipts[len(p.receipts)-1]
+	p.receiptMu.Unlock()
+	send("alice", "approval", "/approve "+token, nil)
+	nextInteractionDecision(t, a)
+	first.events <- Event{Type: EventResult, Content: "linked answer", Done: true}
+	waitQueue(t, func() bool { return p.receiptCount() > 1 })
+	p.receiptMu.Lock()
+	ref := p.receipts[len(p.receipts)-1]
+	p.receiptMu.Unlock()
+	prompt := send("alice", "3", "/delete", nil)
+	parts := strings.SplitN(prompt, "/delete ", 2)
+	if len(parts) != 2 {
+		t.Fatal(prompt)
+	}
+	confirmation := "/delete " + parts[1]
+	send("alice", "4", "/new Beta", nil)
+	if got := send("bob", "5", confirmation, nil); !strings.Contains(got, "Deleted shared session Alpha") {
+		t.Fatal(got)
+	}
+	if got := send("bob", "6", confirmation, nil); !strings.Contains(got, "expired") {
+		t.Fatal(got)
+	}
+	if got := send("alice", "7", "reply old", &ref); !strings.Contains(got, e.i18n.T(MsgSharedReplyUnavailable)) {
+		t.Fatal(got)
+	}
+	if got := send("alice", "old-question", "reply old question", &promptRef); !strings.Contains(got, e.i18n.T(MsgSharedReplyUnavailable)) {
+		t.Fatal(got)
+	}
+	if got := send("alice", "8", "/list", nil); strings.Contains(got, "Alpha") || !strings.Contains(got, "Beta") {
+		t.Fatal(got)
+	}
+	noQueueSession(t, &a.queueTestAgent)
+	if err := e.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	e = NewEngine("project", a, []Platform{p}, path, LangEnglish)
+	t.Cleanup(func() { _ = e.Stop() })
+	if got := send("alice", "9", "reply after restart", &ref); !strings.Contains(got, e.i18n.T(MsgSharedReplyUnavailable)) {
+		t.Fatal(got)
+	}
+	if data, err := os.ReadFile(code); err != nil || string(data) != "keep worktree code" {
+		t.Fatalf("code changed: %q %v", data, err)
+	}
+}
+
+func TestCUJ_B21_ConfirmedDeleteAndConcurrentAdmissionAreAtomic(t *testing.T) {
+	for attempt := 0; attempt < 8; attempt++ {
+		t.Run(fmt.Sprint(attempt), func(t *testing.T) {
+			e, p, a := newQueueEngine(t, t.TempDir(), filepath.Join(t.TempDir(), "state"))
+			queueMessage(e, p, "alice", "1", "/new Alpha")
+			queueMessage(e, p, "bob", "2", "/switch 1")
+			before := len(p.getSent())
+			queueMessage(e, p, "alice", "3", "/delete")
+			prompt := strings.Join(p.getSent()[before:], "\n")
+			parts := strings.SplitN(prompt, "/delete ", 2)
+			if len(parts) != 2 {
+				t.Fatal(prompt)
+			}
+			confirmation := "/delete " + parts[1]
+			before = len(p.getSent())
+			var wg sync.WaitGroup
+			wg.Add(2)
+			go func() { defer wg.Done(); queueMessage(e, p, "bob", "4", confirmation) }()
+			go func() { defer wg.Done(); queueMessage(e, p, "alice", "5", "racing admission") }()
+			wg.Wait()
+			got := strings.Join(p.getSent()[before:], "\n")
+			if strings.Contains(got, "Deleted shared session Alpha") {
+				noQueueSession(t, a)
+				if strings.Contains(got, "Saved for Alpha") {
+					t.Fatal(got)
+				}
+			} else {
+				if !strings.Contains(got, e.i18n.T(MsgSharedDeleteBusy)) {
+					t.Fatal(got)
+				}
+				task := nextQueueSession(t, a)
+				<-task.sent
+				task.events <- Event{Type: EventResult, Content: "raced task complete", Done: true}
+				waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "raced task complete") })
+				before = len(p.getSent())
+				queueMessage(e, p, "bob", "6", confirmation)
+				if got := strings.Join(p.getSent()[before:], "\n"); !strings.Contains(got, "expired") {
+					t.Fatal(got)
+				}
+			}
+		})
+	}
+}
+
+func TestCUJ_B21_RestartRechecksQueuedRequestOwnersBeforeDispatch(t *testing.T) {
+	dir, path := t.TempDir(), filepath.Join(t.TempDir(), "state")
+	holder, hp, ha := newQueueEngine(t, dir, filepath.Join(t.TempDir(), "holder"))
+	queueMessage(holder, hp, "holder", "1", "/new Holder")
+	queueMessage(holder, hp, "holder", "2", "hold directory")
+	held := nextQueueSession(t, ha)
+	<-held.sent
+	p := &mutableSharedPlatform{interactionTestPlatform: interactionTestPlatform{linkTestPlatform: linkTestPlatform{queueTestPlatform: queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}}}, allow: "alice,bob"}
+	a := &queueTestAgent{dir: dir, calls: make(chan *queueTestSession, 10)}
+	e := NewEngine("project", a, []Platform{p}, path, LangEnglish)
+	t.Cleanup(func() { _ = e.Stop() })
+	send := func(user, id, text string) {
+		e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: user, UserID: user, MessageID: id, Content: text, ReplyCtx: user})
+	}
+	send("alice", "1", "/new Alpha")
+	send("bob", "2", "/switch 1")
+	send("alice", "3", "revoked queued")
+	send("bob", "4", "Bob queued")
+	noQueueSession(t, a)
+	if err := e.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	p.SetAllowFrom("bob")
+	e = NewEngine("project", a, []Platform{p}, path, LangEnglish)
+	t.Cleanup(func() { _ = e.Stop() })
+	if err := e.Start(); err != nil {
+		t.Fatal(err)
+	}
+	held.events <- Event{Type: EventResult, Content: "holder released", Done: true}
+	next := nextQueueSession(t, a)
+	if got := <-next.sent; !strings.Contains(got, "Bob queued") {
+		t.Fatal(got)
+	}
+	next.events <- Event{Type: EventResult, Content: "Bob completed", Done: true}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "Bob completed") })
+	noQueueSession(t, a)
+	send("bob", "5", "/queue")
+	if got := strings.Join(p.getSent(), "\n"); !strings.Contains(got, "requester alice — cancelled") {
+		t.Fatal(got)
 	}
 }
