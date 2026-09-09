@@ -1264,9 +1264,12 @@ func main() {
 	}
 
 	// Start internal API server for CLI send
-	apiSrv, err := core.NewAPIServer(cfg.DataDir)
+	apiSrv, err := core.NewAPIServerWithGroup(cfg.DataDir, cfg.APISocketGroup)
 	if err != nil {
 		slog.Warn("api server unavailable", "error", err)
+		if cfg.APISocketGroup != "" {
+			os.Exit(1)
+		}
 	} else {
 		globalAPIServer = apiSrv
 		apiSrv.SetMaxAttachmentSize(resolveMaxAttachmentSize(cfg))

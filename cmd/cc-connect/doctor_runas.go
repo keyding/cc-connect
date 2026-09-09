@@ -30,6 +30,11 @@ func runDoctor(args []string) {
 		os.Exit(2)
 	}
 	switch args[0] {
+	case "_api-probe":
+		if err := probeIsolatedAPI(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "user-isolation":
 		runDoctorUserIsolation(args[1:])
 	default:
@@ -46,6 +51,7 @@ func runDoctorUserIsolation(args []string) {
 	configPath := fs.String("config", "", "path to config file (default: auto-discover)")
 	projectFilter := fs.String("project", "", "limit audit to a single project name")
 	outPath := fs.String("out", "", "path to write JSON report (default: ~/.cc-connect/audits/<timestamp>-<project>.json per project)")
+	apiOnly := fs.Bool("api-only", false, "check bridge routing environment and live API access only")
 	printScript := fs.Bool("print-script", false, "print the embedded probe script and exit")
 	_ = fs.Parse(args)
 
@@ -108,6 +114,7 @@ func runDoctorUserIsolation(args []string) {
 	}
 
 	runner := core.ExecSudoRunner{}
+	i18n := core.NewI18n(core.NormalizeLanguageString(cfg.Language))
 
 	// Fan out preflight + audit per project in parallel. Each project
 	// accumulates its own buffered output so the final stdout stays
@@ -127,7 +134,15 @@ func runDoctorUserIsolation(args []string) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			runDoctorOne(context.Background(), runner, t.project, t.runAsUser, t.workDir, allUsers, supervisor, *outPath, &r.output, &r.exitFailed)
+			if !*apiOnly {
+				runDoctorOne(context.Background(), runner, t.project, t.runAsUser, t.workDir, allUsers, supervisor, *outPath, &r.output, &r.exitFailed)
+			}
+			if err := checkIsolatedAPI(context.Background(), t.runAsUser, cfg.DataDir); err != nil {
+				fmt.Fprintln(&r.output, i18n.Tf(core.MsgIsolationAPIFailed, err))
+				r.exitFailed = true
+			} else {
+				fmt.Fprintln(&r.output, i18n.T(core.MsgIsolationAPIOK))
+			}
 		}()
 	}
 	wg.Wait()

@@ -9,7 +9,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -64,9 +67,37 @@ type SendRequest struct {
 
 // NewAPIServer creates an API server on a Unix socket.
 func NewAPIServer(dataDir string) (*APIServer, error) {
+	return NewAPIServerWithGroup(dataDir, "")
+}
+
+// NewAPIServerWithGroup explicitly grants a trusted Unix group access to the
+// entire internal API. Empty group preserves owner-only socket access.
+func NewAPIServerWithGroup(dataDir, socketGroup string) (*APIServer, error) {
+	gid := -1
+	if socketGroup != "" {
+		if runtime.GOOS == "windows" {
+			return nil, fmt.Errorf("api_socket_group is unsupported on Windows")
+		}
+		group, err := user.LookupGroup(socketGroup)
+		if err != nil {
+			return nil, fmt.Errorf("resolve api_socket_group: %w", err)
+		}
+		gid, err = strconv.Atoi(group.Gid)
+		if err != nil {
+			return nil, fmt.Errorf("parse API group ID: %w", err)
+		}
+	}
 	sockDir := filepath.Join(dataDir, "run")
 	if err := os.MkdirAll(sockDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create run dir: %w", err)
+	}
+	if gid >= 0 {
+		if err := os.Chown(sockDir, -1, gid); err != nil {
+			return nil, fmt.Errorf("set API run directory group (supervisor must belong to api_socket_group): %w", err)
+		}
+		if err := os.Chmod(sockDir, 0750); err != nil {
+			return nil, fmt.Errorf("set API run directory permissions: %w", err)
+		}
 	}
 	sockPath := filepath.Join(sockDir, "api.sock")
 
@@ -77,7 +108,15 @@ func NewAPIServer(dataDir string) (*APIServer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listen unix socket: %w", err)
 	}
-	if err := os.Chmod(sockPath, 0o600); err != nil {
+	mode := os.FileMode(0600)
+	if gid >= 0 {
+		if err := os.Chown(sockPath, -1, gid); err != nil {
+			_ = listener.Close()
+			return nil, fmt.Errorf("set API socket group: %w", err)
+		}
+		mode = 0660
+	}
+	if err := os.Chmod(sockPath, mode); err != nil {
 		_ = listener.Close()
 		return nil, fmt.Errorf("chmod socket: %w", err)
 	}

@@ -84,6 +84,7 @@ var configMu sync.Mutex
 var ConfigPath string
 
 type Config struct {
+	APISocketGroup string `toml:"api_socket_group,omitempty"`
 	DataDir        string `toml:"data_dir"` // session store directory, default ~/.cc-connect
 	AttachmentSend string `toml:"attachment_send"`
 	// Quiet is legacy: when true and [display] does not set thinking_messages / tool_messages,

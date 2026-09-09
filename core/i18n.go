@@ -813,7 +813,14 @@ const (
 	MsgSharedAccessReconcileFailed MsgKey = "SharedAccessReconcileFailed"
 )
 
+const (
+	MsgIsolationAPIOK     MsgKey = "IsolationAPIOK"
+	MsgIsolationAPIFailed MsgKey = "IsolationAPIFailed"
+)
+
 var messages = map[MsgKey]map[Language]string{
+	MsgIsolationAPIOK:              {LangEnglish: "API access: OK (routing environment and target-user socket connection)", LangChinese: "API 访问：正常（路由环境变量及目标账号连接均通过）", LangTraditionalChinese: "API 存取：正常（路由環境變數及目標帳號連線均通過）", LangJapanese: "API アクセス：正常（ルーティング環境と対象ユーザーの接続を確認）", LangSpanish: "Acceso API: correcto (entorno de rutas y conexión del usuario comprobados)"},
+	MsgIsolationAPIFailed:          {LangEnglish: "[FAIL] API access: %v", LangChinese: "[失败] API 访问：%v", LangTraditionalChinese: "[失敗] API 存取：%v", LangJapanese: "[失敗] API アクセス：%v", LangSpanish: "[FALLO] Acceso API: %v"},
 	MsgSharedAccessSaveFailed:      {LangEnglish: "Could not persist authorization settings.", LangChinese: "无法保存授权设置。", LangTraditionalChinese: "無法儲存授權設定。", LangJapanese: "権限設定を保存できませんでした。", LangSpanish: "No se pudo guardar la configuración de autorización."},
 	MsgSharedAccessReconcileFailed: {LangEnglish: "Authorization changed; request reconciliation requires attention before execution can resume.", LangChinese: "授权已更改；恢复执行前需要处理请求状态保存失败。", LangTraditionalChinese: "授權已變更；恢復執行前需要處理請求狀態儲存失敗。", LangJapanese: "権限を変更しました。実行再開前にリクエスト状態の保存失敗に対応してください。", LangSpanish: "Autorización modificada; la conciliación de solicitudes requiere atención antes de reanudar la ejecución."},
 

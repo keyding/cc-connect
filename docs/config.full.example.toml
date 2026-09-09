@@ -17,6 +17,14 @@
 # Global Settings / 全局设置
 # =============================================================================
 
+# NOTE: place api_socket_group at the TOP LEVEL, before any TOML section.
+# api_socket_group = "ccconnect-agent"
+# Explicitly trusts this Unix group with the entire internal API. The service
+# account must belong to it; Agent accounts need traversal on data_dir parents.
+# Reapplied on restart: run/ 0750, api.sock 0660. Omitted: socket 0600.
+# 需放在 TOML 顶层。此组可访问整个内部 API；服务账号须属于该组。
+# 详见 docs/usage.md 的 Internal API access from an isolated Agent。
+
 # Language for bot messages / 机器人消息语言
 # - "en": English
 # - "zh": 中文
@@ -226,7 +234,7 @@ level = "info" # debug, info, warn, error
 # name = "claude-sandboxed"
 # run_as_user = "partseeker-coder"
 # # Extra env vars to forward across the sudo boundary. The default
-# # allowlist (PATH, LANG, LC_*, TERM) is always included; only list
+# # allowlist (LANG, LC_*, TERM, CC_PROJECT, CC_SESSION_KEY, CC_DATA_DIR) is always included; only list
 # # names that the target user cannot reasonably set in their own shell
 # # profile. Secrets belong in the target user's ~/.claude/settings.json
 # # env block, NOT here.
