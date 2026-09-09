@@ -185,3 +185,19 @@ func TestSharedQueueExceptionalStateIcons(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestSharedQueueWithoutSelectionExplainsHowToChoose(t *testing.T) {
+	e, p, _ := newQueueEngine(t, t.TempDir(), filepath.Join(t.TempDir(), "sessions"))
+	queueMessage(e, p, "alice", "1", "/new Alpha")
+	queueMessage(e, p, "bob", "2", "/list")
+	queueMessage(e, p, "bob", "3", "/queue")
+	sent := p.getSent()
+	if got := sent[len(sent)-1]; got != e.i18n.T(MsgQueueChoose) {
+		t.Fatalf("unselected session must explain selection, got %s", got)
+	}
+	queueMessage(e, p, "bob", "4", "/queue missing")
+	sent = p.getSent()
+	if got := sent[len(sent)-1]; got != e.i18n.T(MsgQueueStale) {
+		t.Fatalf("explicit unavailable target should remain distinct, got %s", got)
+	}
+}

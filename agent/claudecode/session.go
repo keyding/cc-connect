@@ -932,6 +932,13 @@ func (cs *claudeSession) handleControlRequest(raw map[string]any) {
 	toolName, _ := request["tool_name"].(string)
 	input, _ := request["input"].(map[string]any)
 
+	// Asking the user is not a tool permission decision. Automatic permission
+	// policies must never invent an answer or suppress the question.
+	if toolName == "AskUserQuestion" {
+		cs.emitPermissionRequest(requestID, toolName, input)
+		return
+	}
+
 	if cs.autoApprove.Load() {
 		slog.Debug("claudeSession: auto-approving", "request_id", requestID, "tool", toolName)
 		_ = cs.RespondPermission(requestID, core.PermissionResult{
@@ -980,6 +987,10 @@ func (cs *claudeSession) handleControlRequest(raw map[string]any) {
 		return
 	}
 
+	cs.emitPermissionRequest(requestID, toolName, input)
+}
+
+func (cs *claudeSession) emitPermissionRequest(requestID, toolName string, input map[string]any) {
 	slog.Info("claudeSession: permission request", "request_id", requestID, "tool", toolName)
 	evt := core.Event{
 		Type:         core.EventPermissionRequest,
