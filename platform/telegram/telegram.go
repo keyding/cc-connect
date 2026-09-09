@@ -1133,7 +1133,7 @@ func (p *Platform) Reply(ctx context.Context, rctx any, content string) error {
 				"method", "Reply",
 				"html_len", len(html),
 			)
-			return p.sendChunked(ctx, bot, rc, html, params.ReplyParameters)
+			return p.sendChunked(ctx, bot, rc, content, params.ReplyParameters)
 		}
 		if err != nil {
 			return fmt.Errorf("telegram: send: %w", err)
@@ -1184,7 +1184,7 @@ func (p *Platform) Send(ctx context.Context, rctx any, content string) error {
 				"method", "Send",
 				"html_len", len(html),
 			)
-			return p.sendChunked(ctx, bot, rc, html, params.ReplyParameters)
+			return p.sendChunked(ctx, bot, rc, content, params.ReplyParameters)
 		}
 		if err != nil {
 			return fmt.Errorf("telegram: send: %w", err)
@@ -1380,7 +1380,7 @@ func (p *Platform) SendWithButtons(ctx context.Context, rctx any, content string
 				"method", "SendWithButtons",
 				"html_len", len(html),
 			)
-			return p.sendChunkedWithButtons(ctx, bot, rc, html, rows)
+			return p.sendChunkedWithButtons(ctx, bot, rc, content, rows)
 		}
 		if err != nil {
 			return fmt.Errorf("telegram: sendWithButtons: %w", err)
@@ -1587,14 +1587,14 @@ func (p *Platform) UpdateMessage(ctx context.Context, previewHandle any, content
 const telegramMaxMessageLen = 4096
 
 // sendChunked splits a message that's too long and sends it as multiple messages.
-// It uses SplitMessageCodeFenceAware to respect code block boundaries.
-func (p *Platform) sendChunked(ctx context.Context, bot telegramBot, rc replyContext, html string, reply *models.ReplyParameters) error {
-	chunks := core.SplitMessageCodeFenceAware(html, telegramMaxMessageLen)
+// Split Markdown before converting each chunk so HTML tags remain balanced.
+func (p *Platform) sendChunked(ctx context.Context, bot telegramBot, rc replyContext, content string, reply *models.ReplyParameters) error {
+	chunks := core.SplitMessageCodeFenceAware(content, telegramMaxMessageLen)
 	for i, chunk := range chunks {
 		params := &tgbot.SendMessageParams{
 			ChatID:          rc.chatID,
 			MessageThreadID: rc.threadID,
-			Text:            chunk,
+			Text:            core.MarkdownToSimpleHTML(chunk),
 			ParseMode:       models.ParseModeHTML,
 		}
 		if i == 0 && rc.messageID != 0 {
@@ -1603,7 +1603,7 @@ func (p *Platform) sendChunked(ctx context.Context, bot telegramBot, rc replyCon
 		if _, err := bot.SendMessage(ctx, params); err != nil {
 			// If HTML fails, try plain text
 			if strings.Contains(err.Error(), "can't parse") {
-				params.Text = chunk
+				params.Text = core.StripMarkdown(chunk)
 				params.ParseMode = ""
 				if _, err2 := bot.SendMessage(ctx, params); err2 != nil {
 					return fmt.Errorf("telegram: send chunk %d: %w", i, err2)
@@ -1618,13 +1618,13 @@ func (p *Platform) sendChunked(ctx context.Context, bot telegramBot, rc replyCon
 
 // sendChunkedWithButtons splits a message that's too long and sends it as multiple messages.
 // The first chunk includes the inline keyboard buttons.
-func (p *Platform) sendChunkedWithButtons(ctx context.Context, bot telegramBot, rc replyContext, html string, rows [][]models.InlineKeyboardButton) error {
-	chunks := core.SplitMessageCodeFenceAware(html, telegramMaxMessageLen)
+func (p *Platform) sendChunkedWithButtons(ctx context.Context, bot telegramBot, rc replyContext, content string, rows [][]models.InlineKeyboardButton) error {
+	chunks := core.SplitMessageCodeFenceAware(content, telegramMaxMessageLen)
 	for i, chunk := range chunks {
 		params := &tgbot.SendMessageParams{
 			ChatID:          rc.chatID,
 			MessageThreadID: rc.threadID,
-			Text:            chunk,
+			Text:            core.MarkdownToSimpleHTML(chunk),
 			ParseMode:       models.ParseModeHTML,
 		}
 		// Only first chunk gets the buttons
@@ -1634,7 +1634,7 @@ func (p *Platform) sendChunkedWithButtons(ctx context.Context, bot telegramBot, 
 		if _, err := bot.SendMessage(ctx, params); err != nil {
 			// If HTML fails, try plain text
 			if strings.Contains(err.Error(), "can't parse") {
-				params.Text = chunk
+				params.Text = core.StripMarkdown(chunk)
 				params.ParseMode = ""
 				if _, err2 := bot.SendMessage(ctx, params); err2 != nil {
 					return fmt.Errorf("telegram: send chunk %d: %w", i, err2)
