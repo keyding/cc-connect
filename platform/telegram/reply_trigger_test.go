@@ -99,8 +99,8 @@ func TestSendChunkedPreservesReplyToTriggerOption(t *testing.T) {
 		if err := p.Send(context.Background(), replyContext{chatID: 7, threadID: 4, messageID: 42}, strings.Repeat("a", 5000)); err != nil {
 			t.Fatal(err)
 		}
-		if len(b.sent) != 3 {
-			t.Fatalf("expected original plus two chunks: %d", len(b.sent))
+		if len(b.sent) != 4 {
+			t.Fatalf("expected original plus three chunks: %d", len(b.sent))
 		}
 		first := b.sent[1].ReplyParameters
 		if enabled {

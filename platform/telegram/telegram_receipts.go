@@ -25,7 +25,7 @@ func (p *Platform) replyWithReceipt(ctx context.Context, target any, text string
 	if err != nil {
 		return err
 	}
-	chunks := core.SplitMessageCodeFenceAware(text, telegramMaxMessageLen)
+	chunks := core.SplitMessageCodeFenceAware(text, telegramChunkRuneLimit)
 	for i, chunk := range chunks {
 		params := &tgbot.SendMessageParams{ChatID: rc.chatID, MessageThreadID: rc.threadID, Text: core.MarkdownToSimpleHTML(chunk), ParseMode: models.ParseModeHTML}
 		if i == 0 && markup != nil {
