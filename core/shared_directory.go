@@ -170,17 +170,7 @@ func (scope *sharedScope) change(entry, agent, command, arg string) (MsgKey, err
 		scope.Sessions = append(scope.Sessions, sharedSession{ID: id, Name: arg, AgentType: agent})
 		scope.Selections[entry] = id
 	case "switch":
-		target := -1
-		if n, err := strconv.Atoi(arg); err == nil && n > 0 && n <= len(scope.Sessions) {
-			target = n - 1
-		} else {
-			for i, s := range scope.Sessions {
-				if s.ID == arg || sharedNameKey(s.Name) == sharedNameKey(arg) {
-					target = i
-					break
-				}
-			}
-		}
+		target := sharedSessionIndex(scope.Sessions, arg)
 		if target < 0 {
 			return MsgSharedNotFound, nil
 		}
@@ -201,4 +191,17 @@ func (scope *sharedScope) change(entry, agent, command, arg string) (MsgKey, err
 	}
 
 	return "", nil
+}
+
+// sharedSessionIndex keeps command selectors aligned with the displayed list.
+func sharedSessionIndex(sessions []sharedSession, selector string) int {
+	if n, err := strconv.Atoi(selector); err == nil && n > 0 && n <= len(sessions) {
+		return n - 1
+	}
+	for i, s := range sessions {
+		if s.ID == selector || sharedNameKey(s.Name) == sharedNameKey(selector) {
+			return i
+		}
+	}
+	return -1
 }

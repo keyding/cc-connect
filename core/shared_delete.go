@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"strings"
 )
 
 type sharedDeleteConfirmation struct {
@@ -32,11 +33,13 @@ func (e *Engine) handleSharedDelete(p Platform, msg *Message, args []string) {
 			return
 		}
 		sessionID = confirmation.Session
-	} else if len(args) == 1 {
-		sessionID = args[0]
-	} else if len(args) > 1 {
-		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgQueueStale))
-		return
+	} else if len(args) > 0 {
+		index := sharedSessionIndex(scope.Sessions, strings.Join(args, " "))
+		if index < 0 {
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgSharedNotFound))
+			return
+		}
+		sessionID = scope.Sessions[index].ID
 	}
 	var session sharedSession
 	for _, s := range scope.Sessions {

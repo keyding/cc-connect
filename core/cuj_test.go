@@ -4029,3 +4029,69 @@ func TestCUJ_B14_SharedModelModeCommandsPreserveConversation(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestCUJ_B21_DeleteByListNumberPreservesSelection(t *testing.T) {
+	for _, selector := range []string{"2", "beta session", "ID"} {
+		t.Run(selector, func(t *testing.T) {
+			p := &stubPlatformEngine{n: "test"}
+			e := NewEngine("project", &cujAgent{}, []Platform{p}, filepath.Join(t.TempDir(), "sessions.json"), LangEnglish)
+			t.Cleanup(func() { _ = e.Stop() })
+			send := func(user, text string) string {
+				before := len(p.getSent())
+				e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: user, UserID: user, Content: text})
+				return strings.Join(p.getSent()[before:], "\n")
+			}
+			send("alice", "/new Alpha")
+			send("alice", "/new Beta Session")
+			target := selector
+			if target == "ID" {
+				target = regexp.MustCompile(`[0-9a-f]{32}`).FindString(send("alice", "/current"))
+			}
+			// Deleting the selected idle session must also accept the list selector.
+			if got := send("alice", "/delete "+target); !strings.Contains(got, "confirm") {
+				t.Fatal(got)
+			}
+			send("alice", "/switch 1")
+			prompt := send("alice", "/delete "+target)
+			if !strings.Contains(prompt, "Beta Session") || !strings.Contains(prompt, "confirm") {
+				t.Fatalf("delete did not offer confirmation: %s", prompt)
+			}
+			if got := send("alice", "/current"); !strings.Contains(got, "Alpha") {
+				t.Fatalf("delete changed selection: %s", got)
+			}
+			if got := send("alice", "/list"); !strings.Contains(got, "Beta Session") {
+				t.Fatal("deleted before confirmation")
+			}
+			if got := send("alice", "/delete 999"); !strings.Contains(got, e.i18n.T(MsgSharedNotFound)) {
+				t.Fatal(got)
+			}
+			// An explicit target works even when the caller has no default selection.
+			prompt = send("bob", "/delete "+target)
+			parts := strings.SplitN(prompt, "/delete ", 2)
+			if len(parts) != 2 {
+				t.Fatal(prompt)
+			}
+			confirmation := "/delete " + strings.TrimSpace(parts[1])
+			// Change both the default selection and the list numbering before confirming.
+			alphaPrompt := send("alice", "/delete")
+			alphaParts := strings.SplitN(alphaPrompt, "/delete ", 2)
+			if len(alphaParts) != 2 {
+				t.Fatal(alphaPrompt)
+			}
+			send("alice", "/delete "+strings.TrimSpace(alphaParts[1]))
+			send("alice", "/new Gamma")
+			if got := send("bob", confirmation); !strings.Contains(got, "Deleted shared session Beta Session") {
+				t.Fatal(got)
+			}
+			if got := send("alice", "/list"); strings.Contains(got, "Beta Session") || !strings.Contains(got, "Gamma") {
+				t.Fatal(got)
+			}
+			if got := send("alice", "/current"); !strings.Contains(got, "Gamma") {
+				t.Fatal(got)
+			}
+			if got := send("bob", confirmation); !strings.Contains(got, e.i18n.T(MsgQueueStale)) {
+				t.Fatal(got)
+			}
+		})
+	}
+}

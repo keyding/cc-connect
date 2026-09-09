@@ -1185,11 +1185,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "Ese nombre ya existe. Elige otro; la selección no ha cambiado.",
 	},
 	MsgSharedNotFound: {
-		LangEnglish:            "Session not found. Use /list, then /switch <number, name or ID>.",
-		LangChinese:            "未找到会话，请 /list 后用 /switch <序号、名称或 ID>。",
-		LangTraditionalChinese: "找不到會話，請 /list 後用 /switch <序號、名稱或 ID>。",
-		LangJapanese:           "会話が見つかりません。/list の後に /switch <番号・名前・ID> を使ってください。",
-		LangSpanish:            "Sesión no encontrada. Usa /list y /switch <número, nombre o ID>.",
+		LangEnglish:            "Session not found. Use /list to check the number, name or ID.",
+		LangChinese:            "未找到会话，请用 /list 核对序号、名称或 ID。",
+		LangTraditionalChinese: "找不到會話，請用 /list 核對序號、名稱或 ID。",
+		LangJapanese:           "会話が見つかりません。/list で番号・名前・ID を確認してください。",
+		LangSpanish:            "Sesión no encontrada. Usa /list para comprobar el número, nombre o ID.",
 	},
 	MsgSharedNameUsage: {
 		LangEnglish:            "Use /name <new name> to rename the selected session.",
@@ -1416,11 +1416,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "Consultar riesgos antes de continuar",
 	},
 	MsgSharedCmdDelete: {
-		LangEnglish:            "Confirm deletion of an idle session",
-		LangChinese:            "确认删除无待处理任务的会话",
-		LangTraditionalChinese: "確認刪除無待處理任務的會話",
-		LangJapanese:           "未処理タスクのない会話を確認して削除",
-		LangSpanish:            "Confirmar borrado de sesión sin tareas",
+		LangEnglish:            "Delete idle session: /delete [number, name or ID]",
+		LangChinese:            "删除空闲会话：/delete [序号、名称或 ID]",
+		LangTraditionalChinese: "刪除閒置會話：/delete [序號、名稱或 ID]",
+		LangJapanese:           "待機中の会話を削除：/delete [番号・名前・ID]",
+		LangSpanish:            "Eliminar sesión sin tareas: /delete [número, nombre o ID]",
 	},
 	MsgSharedCmdApprove: {
 		LangEnglish:            "Requester only: /approve <token>",
