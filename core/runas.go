@@ -105,6 +105,8 @@ var DefaultEnvAllowlist = []string{
 	"LC_CTYPE",
 	"LC_MESSAGES",
 	"TERM",
+	// Per-request bridge routing is runtime context, not provider credentials.
+	"CC_PROJECT", "CC_SESSION_KEY", "CC_DATA_DIR",
 }
 
 // SpawnOptions controls how a command is spawned. Zero value = legacy

@@ -432,7 +432,7 @@ name = "claude-sandboxed"
 run_as_user = "partseeker-coder"
 
 # Optional: extend the default env var allowlist that crosses the sudo
-# boundary. The defaults (PATH, LANG, LC_*, TERM) are always included.
+# boundary. The defaults (LANG, LC_*, TERM, CC_PROJECT, CC_SESSION_KEY, CC_DATA_DIR) are always included.
 # Only list vars the target user cannot reasonably set in their own
 # shell profile. Secrets belong in the target user's ~/.claude/settings.json
 # env block, NOT here.
@@ -1267,3 +1267,67 @@ tunneled through it.
 
 Full reference: [docs/telegram.md](./telegram.md#21-optional-use-a-proxy).
 This option was added in PR #389.
+
+### Internal API access from an isolated Agent
+
+`cc-connect send` uses the local Unix socket API. A daemon running as one
+Unix account and an Agent running as another need an explicit access grant:
+
+```toml
+# Top-level setting, before any [section]. Linux/macOS only.
+api_socket_group = "ccconnect-agent"
+```
+
+Members of this trusted group gain access to the **whole internal API**, including
+send, cron, timer and relay operations; this is not a send-only or per-project
+permission. Do not put mutually untrusted Agent accounts in the same API group.
+The default (omitted/empty) keeps the socket owner-only (`0600`).
+
+The service account must belong to the configured group. For systemd, for example:
+
+```ini
+# systemctl edit cc-connect
+[Service]
+SupplementaryGroups=ccconnect-agent
+```
+
+Then run `systemctl daemon-reload` and restart after active tasks finish.
+On every start cc-connect assigns `data_dir/run` to this group with mode `0750`
+and `data_dir/run/api.sock` with mode `0660`. The group cannot replace the socket
+because the directory is not group-writable. Higher ancestor directories must
+already permit traversal by the Agent account; check with `namei -l` on Linux.
+Grant only the required traversal (via an appropriate group or ACL); do not make
+the complete data directory or config world-readable. A configured group that
+cannot be applied causes startup to fail with an actionable log message.
+
+One-off `chmod`/`chgrp` on the socket is not a persistent fix: it is recreated on
+restart. The explicit setting reapplies access each time. It does not recursively
+change parent permissions or operating-system group membership.
+
+The runtime preserves `CC_PROJECT`, `CC_SESSION_KEY`, and `CC_DATA_DIR` across
+`run_as_user` automatically. Do not hardcode a session key in config or a shell
+profile: shared output is bound to the currently active request. Arbitrary
+provider credentials, supervisor HOME and PATH remain excluded unless otherwise
+explicitly configured. For shared tasks, sending after the request ends is
+rejected rather than redirected to a different conversation.
+
+After the service has started, run the check as the **service account**, with
+its actual config path:
+
+```bash
+cc-connect doctor user-isolation --config /path/to/config.toml --api-only
+```
+
+The check crosses the same sudo/login environment boundary as Agent startup,
+checks the three routing variables, and makes a read-only API request as the
+Agent account. It sends no Telegram message and prints no session list. The
+full `doctor user-isolation` includes this check too; before the service starts,
+API access is expected to fail and must be checked again afterward.
+
+Finally ask the actual Agent to generate and send one image and one Markdown
+file using `cc-connect send --image /absolute/path.png` and
+`cc-connect send --file /absolute/path.md` during its active request. Check the
+reply location and old-message routing, then restart and repeat. Passing doctor
+proves access, not actual Telegram attachment delivery. `attachment_send = "off"`,
+attachment size limits, missing files, and platform/network errors can still
+prevent delivery. Do not bypass the bridge with a Bot token for this check.

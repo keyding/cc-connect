@@ -714,3 +714,11 @@ MIT License
 <p align="center">
   <sub>由 cc-connect 社区用 ❤️ 构建</sub>
 </p>
+
+使用 `run_as_user` 时，若需要 Agent 通过 `cc-connect send` 回传附件，
+还须配置内部 API 的跨账号访问。顶层 `api_socket_group` 可在每次重启时
+设置可信组权限；该组获得整个内部 API 的访问能力。三个路由变量
+`CC_PROJECT`、`CC_SESSION_KEY`、`CC_DATA_DIR` 由运行时自动保留。
+服务启动后，以服务账号执行
+`cc-connect doctor user-isolation --config <配置路径> --api-only` 检查。
+详见 [隔离账号 API 配置与验收](docs/usage.md#internal-api-access-from-an-isolated-agent)。

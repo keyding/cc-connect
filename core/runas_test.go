@@ -154,7 +154,7 @@ func TestFilterEnvForSpawn_RunAsUser(t *testing.T) {
 	// sudo -i can rebuild it from the target user's login profile
 	// instead of inheriting the supervisor's PATH.
 	wantKept := map[string]bool{
-		"LANG=en_US.UTF-8":                 true,
+		"LANG=en_US.UTF-8":                  true,
 		"PGSSLROOTCERT=/etc/certs/root.crt": true,
 	}
 	for _, e := range got {
@@ -201,8 +201,8 @@ func TestVerifyRunAsUserCheap_Success(t *testing.T) {
 	ResetVerifyCache()
 	runner := &stubSudoRunner{
 		script: map[string]stubResponse{
-			key("-n", "-iu", "target", "--", "/usr/bin/true"):                           {nil, nil},
-			key("-n", "-iu", "target", "--", "sudo", "-n", "/usr/bin/true"):             {[]byte("a password is required"), &exec.ExitError{}},
+			key("-n", "-iu", "target", "--", "/usr/bin/true"):               {nil, nil},
+			key("-n", "-iu", "target", "--", "sudo", "-n", "/usr/bin/true"): {[]byte("a password is required"), &exec.ExitError{}},
 		},
 	}
 	if err := VerifyRunAsUserCheap(context.Background(), runner, "target"); err != nil {
@@ -278,3 +278,16 @@ func TestVerifyRunAsUserCheap_CacheHit(t *testing.T) {
 	}
 }
 
+func TestIsolatedSpawnPreservesBridgeRoutingWithoutSecrets(t *testing.T) {
+	opts := SpawnOptions{RunAsUser: "agent"}
+	got := FilterEnvForSpawn([]string{"CC_PROJECT=p", "CC_SESSION_KEY=shared-request:r1", "CC_DATA_DIR=/srv/data", "SECRET=hidden", "HOME=/supervisor", "PATH=/supervisor/bin"}, opts)
+	if len(got) != 3 {
+		t.Fatalf("wrong preserved environment: %v", got)
+	}
+	cmd := BuildSpawnCommand(context.Background(), opts, "claude")
+	for _, key := range []string{"CC_PROJECT", "CC_SESSION_KEY", "CC_DATA_DIR"} {
+		if !strings.Contains(strings.Join(cmd.Args, " "), key) {
+			t.Fatalf("sudo does not preserve %s", key)
+		}
+	}
+}
