@@ -46,7 +46,7 @@ type queueTestAgent struct {
 
 func (a *queueTestAgent) GetWorkDir() string { return a.dir }
 func (a *queueTestAgent) StartSession(ctx context.Context, id string) (AgentSession, error) {
-	s := &queueTestSession{cujAgentSession: newCUJAgentSession(), resume: id, sent: make(chan string, 1), sendRelease: a.sendRelease, sendError: a.sendError, exitRelease: a.exitRelease}
+	s := &queueTestSession{cujAgentSession: newCUJAgentSession(), resume: id, sent: make(chan string, 1), responses: make(chan PermissionResult, 10), sendRelease: a.sendRelease, sendError: a.sendError, exitRelease: a.exitRelease}
 	a.calls <- s
 	return s, nil
 }
@@ -54,6 +54,7 @@ func (a *queueTestAgent) StartSession(ctx context.Context, id string) (AgentSess
 type queueTestSession struct {
 	*cujAgentSession
 	resume      string
+	responses   chan PermissionResult
 	sent        chan string
 	files       []FileAttachment
 	sendRelease <-chan struct{}
@@ -68,6 +69,12 @@ func (s *queueTestSession) Send(prompt, id string, images []ImageAttachment, fil
 		<-s.sendRelease
 	}
 	return s.sendError
+}
+func (s *queueTestSession) RespondPermission(_ string, result PermissionResult) error {
+	if s.responses != nil {
+		s.responses <- result
+	}
+	return nil
 }
 func (s *queueTestSession) CurrentSessionID() string { return "history-one" }
 func nextQueueSession(t *testing.T, a *queueTestAgent) *queueTestSession {
@@ -181,6 +188,8 @@ func TestSharedQueue_SameActualDirectoryAndIndependentDirectory(t *testing.T) {
 	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "waiting for interaction") })
 	noQueueSession(t, oa)
 	free.events <- Event{Type: EventResult, Content: "free done", Done: true}
+	queueMessage(e, p, "a", "3", "/approve "+waitInteraction(t, p, 1))
+	<-first.responses
 	first.events <- Event{Type: EventResult, Content: "first done", Done: true}
 	second := nextQueueSession(t, oa)
 	<-second.sent

@@ -14,6 +14,9 @@ import (
 // ReplyWithReceipt keeps the original chat/topic even when the quoted message
 // disappeared. Never retry on an uncertain network result or receipt failure.
 func (p *Platform) ReplyWithReceipt(ctx context.Context, target any, text string, record func(core.MessageReference) error) error {
+	return p.replyWithReceipt(ctx, target, text, nil, record)
+}
+func (p *Platform) replyWithReceipt(ctx context.Context, target any, text string, markup *models.InlineKeyboardMarkup, record func(core.MessageReference) error) error {
 	rc, ok := target.(replyContext)
 	if !ok {
 		return fmt.Errorf("telegram: invalid receipt reply context %T", target)
@@ -25,6 +28,9 @@ func (p *Platform) ReplyWithReceipt(ctx context.Context, target any, text string
 	chunks := core.SplitMessageCodeFenceAware(core.MarkdownToSimpleHTML(text), telegramMaxMessageLen)
 	for i, chunk := range chunks {
 		params := &tgbot.SendMessageParams{ChatID: rc.chatID, MessageThreadID: rc.threadID, Text: chunk, ParseMode: models.ParseModeHTML}
+		if i == 0 && markup != nil {
+			params.ReplyMarkup = markup
+		}
 		if i == 0 && rc.messageID != 0 {
 			params.ReplyParameters = &models.ReplyParameters{MessageID: rc.messageID, AllowSendingWithoutReply: true}
 		}

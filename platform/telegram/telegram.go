@@ -801,6 +801,9 @@ func retryLogMessage(cause retryCause) string {
 }
 
 func (p *Platform) handleCallbackQuery(ctx context.Context, cb *models.CallbackQuery) {
+	if p.handleInaccessibleSharedCallback(cb) {
+		return
+	}
 	msg := cb.Message.Message
 	if msg == nil {
 		return
@@ -849,6 +852,11 @@ func (p *Platform) handleCallbackQuery(ctx context.Context, cb *models.CallbackQ
 		chatName = msg.Chat.Title
 	}
 	rctx := replyContext{chatID: chatID, threadID: threadID, messageID: msgID}
+
+	if strings.HasPrefix(data, "shared:") || (p.sharedScope(msg.Chat) != "" && (strings.HasPrefix(data, "perm:") || strings.HasPrefix(data, "askq:"))) {
+		p.handler(p, &core.Message{SharedScope: p.sharedScope(msg.Chat), SessionKey: sessionKey, Platform: "telegram", UserID: userID, UserName: userName, MessageID: cb.ID, ChannelKey: channelKey, ReplyCtx: rctx, Interaction: parseSharedInteraction(data)})
+		return
+	}
 
 	emptyMarkup := &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}}
 
@@ -914,16 +922,17 @@ func (p *Platform) handleCallbackQuery(ctx context.Context, cb *models.CallbackQ
 		}
 
 		p.handler(p, &core.Message{
-			SharedScope: p.sharedScope(msg.Chat),
-			SessionKey:  sessionKey,
-			Platform:    "telegram",
-			UserID:      userID,
-			UserName:    userName,
-			ChatName:    chatName,
-			Content:     data,
-			MessageID:   strconv.Itoa(msgID),
-			ChannelKey:  channelKey,
-			ReplyCtx:    rctx,
+			SharedScope:          p.sharedScope(msg.Chat),
+			IsPermissionResponse: true,
+			SessionKey:           sessionKey,
+			Platform:             "telegram",
+			UserID:               userID,
+			UserName:             userName,
+			ChatName:             chatName,
+			Content:              data,
+			MessageID:            strconv.Itoa(msgID),
+			ChannelKey:           channelKey,
+			ReplyCtx:             rctx,
 		})
 		return
 	}
@@ -1065,6 +1074,9 @@ func isCommand(msg *models.Message) bool {
 }
 
 func (p *Platform) Reply(ctx context.Context, rctx any, content string) error {
+	if callback, ok := rctx.(interactionCallbackReply); ok {
+		return p.replyInteractionCallback(ctx, callback, content)
+	}
 	rc, ok := rctx.(replyContext)
 	if !ok {
 		return fmt.Errorf("telegram: invalid reply context type %T", rctx)

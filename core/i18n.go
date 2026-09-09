@@ -748,7 +748,91 @@ const (
 	MsgRecoveryAdmissionStatus   MsgKey = "RecoveryAdmissionStatus"
 )
 
+const (
+	MsgInteractionPrompt      MsgKey = "shared_interaction_prompt"
+	MsgInteractionHint        MsgKey = "shared_interaction_hint"
+	MsgInteractionAnswerUsage MsgKey = "shared_interaction_answerusage"
+	MsgInteractionDenied      MsgKey = "shared_interaction_denied"
+	MsgInteractionStale       MsgKey = "shared_interaction_stale"
+	MsgInteractionReceived    MsgKey = "shared_interaction_received"
+	MsgInteractionAnswerSaved MsgKey = "shared_interaction_answersaved"
+	MsgInteractionWaiting     MsgKey = "shared_interaction_waiting"
+	MsgInteractionAllow       MsgKey = "shared_interaction_allow"
+	MsgInteractionDeny        MsgKey = "shared_interaction_deny"
+)
+
 var messages = map[MsgKey]map[Language]string{
+	MsgInteractionPrompt: {
+		LangEnglish:            "Session %s · requester %s · waiting for interaction: %s",
+		LangChinese:            "会话 %s · 发起人 %s · 等待交互：%s",
+		LangTraditionalChinese: "會話 %s · 發起人 %s · 等待互動：%s",
+		LangJapanese:           "会話 %s · 依頼者 %s · 操作待ち：%s",
+		LangSpanish:            "Sesión %s · solicitante %s · esperando interacción: %s",
+	},
+	MsgInteractionHint: {
+		LangEnglish:            "Use the current buttons or explicit /approve, /deny or /answer entry. Ordinary replies to this prompt do not approve or submit tasks.",
+		LangChinese:            "请使用当前按钮或明确的 /approve、/deny、/answer 入口。普通回复此提示不会批准或提交任务。",
+		LangTraditionalChinese: "請使用目前按鈕或明確的 /approve、/deny、/answer 入口。普通回覆此提示不會批准或提交任務。",
+		LangJapanese:           "現在のボタンまたは /approve、/deny、/answer を使ってください。この通知への通常返信は承認やタスクになりません。",
+		LangSpanish:            "Usa los botones actuales o /approve, /deny o /answer. Responder normalmente a este aviso no aprueba ni envía tareas.",
+	},
+	MsgInteractionAnswerUsage: {
+		LangEnglish:            "Answer explicitly: /answer %s %d <answer or option numbers>",
+		LangChinese:            "请明确回答：/answer %s %d <回答或选项编号>",
+		LangTraditionalChinese: "請明確回答：/answer %s %d <回答或選項編號>",
+		LangJapanese:           "回答：/answer %s %d <回答または選択肢番号>",
+		LangSpanish:            "Responde: /answer %s %d <respuesta o números de opciones>",
+	},
+	MsgInteractionDenied: {
+		LangEnglish:            "Only the currently authorized task requester may answer this interaction.",
+		LangChinese:            "仅当前仍有权限的任务发起人可以回答此交互。",
+		LangTraditionalChinese: "僅目前仍有權限的任務發起人可以回答此互動。",
+		LangJapanese:           "現在権限を持つタスク依頼者のみ回答できます。",
+		LangSpanish:            "Solo el solicitante de la tarea con autorización vigente puede responder.",
+	},
+	MsgInteractionStale: {
+		LangEnglish:            "This interaction is invalid, already answered or expired. Use the current question entry.",
+		LangChinese:            "该交互已失效、已回答或已过期。请使用当前问题入口。",
+		LangTraditionalChinese: "該互動已失效、已回答或已過期。請使用目前問題入口。",
+		LangJapanese:           "この操作は無効、回答済み、または期限切れです。現在の質問を使ってください。",
+		LangSpanish:            "Esta interacción es inválida, ya fue respondida o caducó. Usa la pregunta actual.",
+	},
+	MsgInteractionReceived: {
+		LangEnglish:            "Response received for this task.",
+		LangChinese:            "已收到此任务的交互响应。",
+		LangTraditionalChinese: "已收到此任務的互動回應。",
+		LangJapanese:           "このタスクへの回答を受け付けました。",
+		LangSpanish:            "Respuesta recibida para esta tarea.",
+	},
+	MsgInteractionAnswerSaved: {
+		LangEnglish:            "Answer recorded. Please answer the remaining questions.",
+		LangChinese:            "已记录回答，请继续回答其余问题。",
+		LangTraditionalChinese: "已記錄回答，請繼續回答其餘問題。",
+		LangJapanese:           "回答を記録しました。残りの質問に回答してください。",
+		LangSpanish:            "Respuesta registrada. Responde las preguntas restantes.",
+	},
+	MsgInteractionWaiting: {
+		LangEnglish:            "Waiting for requester interaction",
+		LangChinese:            "等待发起人交互",
+		LangTraditionalChinese: "等待發起人互動",
+		LangJapanese:           "依頼者の操作待ち",
+		LangSpanish:            "Esperando al solicitante",
+	},
+	MsgInteractionAllow: {
+		LangEnglish:            "Allow once",
+		LangChinese:            "允许本次",
+		LangTraditionalChinese: "允許本次",
+		LangJapanese:           "今回のみ許可",
+		LangSpanish:            "Permitir una vez",
+	},
+	MsgInteractionDeny: {
+		LangEnglish:            "Deny",
+		LangChinese:            "拒绝",
+		LangTraditionalChinese: "拒絕",
+		LangJapanese:           "拒否",
+		LangSpanish:            "Denegar",
+	},
+
 	MsgSharedProgress: {
 		LangEnglish:            "Working: %s",
 		LangChinese:            "正在执行：%s",

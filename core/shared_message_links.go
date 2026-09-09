@@ -27,6 +27,9 @@ func sharedMessageKey(project, platform string, ref MessageReference) string {
 }
 
 func (d *sharedDirectory) recordMessage(project, platform, scope, session string, ref MessageReference) error {
+	return d.recordMessageKind(project, platform, scope, session, ref, false)
+}
+func (d *sharedDirectory) recordMessageKind(project, platform, scope, session string, ref MessageReference, interaction bool) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.loadErr != nil {
@@ -45,6 +48,13 @@ func (d *sharedDirectory) recordMessage(project, platform, scope, session string
 		next.Links[k] = v
 	}
 	next.Links[key] = session
+	next.InteractionLinks = make(map[string]bool, len(d.state.InteractionLinks)+1)
+	for k, v := range d.state.InteractionLinks {
+		next.InteractionLinks[k] = v
+	}
+	if interaction {
+		next.InteractionLinks[key] = true
+	}
 	if err := d.save(next); err != nil {
 		return fmt.Errorf("save message receipt: %w", err)
 	}
@@ -58,6 +68,9 @@ func (d *sharedDirectory) resolveMessage(project, platform, scope string, ref Me
 	if d.loadErr != nil || ref.Scope != scope || ref.MessageID == "" || ref.MessageID == "0" {
 		return sharedSession{}, false
 	}
+	if d.state.InteractionLinks[sharedMessageKey(project, platform, ref)] {
+		return sharedSession{}, false
+	}
 	id := d.state.Links[sharedMessageKey(project, platform, ref)]
 	for _, s := range d.state.Scopes[sharedScopeKey(project, platform, scope)].Sessions {
 		if s.ID == id {
@@ -68,6 +81,10 @@ func (d *sharedDirectory) resolveMessage(project, platform, scope string, ref Me
 }
 
 func (e *Engine) routeSharedReply(p Platform, msg *Message) {
+	if e.sharedDirectory.isInteractionMessage(e.name, msg.Platform, msg.SharedScope, *msg.BotReply) {
+		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgInteractionHint))
+		return
+	}
 	s, ok := e.sharedDirectory.resolveMessage(e.name, msg.Platform, msg.SharedScope, *msg.BotReply)
 	if !ok {
 		slog.Debug("shared message reference unavailable", "platform", msg.Platform)

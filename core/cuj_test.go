@@ -3426,3 +3426,145 @@ func TestCUJ_B17_UncertainAdmissionFencesExecutionAndProvidesStableLookup(t *tes
 		})
 	}
 }
+
+func TestCUJ_B20_InitiatorNonceQuestionsAndDefaultIndependence(t *testing.T) {
+	a := &interactionTestAgent{queueTestAgent: queueTestAgent{dir: t.TempDir(), calls: make(chan *queueTestSession, 10)}, decisions: make(chan interactionDecision, 10)}
+	p := &interactionTestPlatform{linkTestPlatform: linkTestPlatform{queueTestPlatform: queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}}}
+	e := NewEngine("project", a, []Platform{p}, filepath.Join(t.TempDir(), "sessions"), LangEnglish)
+	e.eventIdleTimeout = 30 * time.Millisecond
+	t.Cleanup(func() { _ = e.Stop() })
+	send := func(user, id, text string, ref *MessageReference, response *InteractionResponse) {
+		e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: user, UserID: user, MessageID: id, Content: text, ReplyCtx: user, BotReply: ref, Interaction: response})
+	}
+	send("alice", "1", "/new Alpha", nil, nil)
+	send("alice", "2", "work", nil, nil)
+	s := nextQueueSession(t, &a.queueTestAgent)
+	<-s.sent
+	s.events <- Event{Type: EventPermissionRequest, RequestID: "agent-question", ToolName: "Bash", ToolInput: "git status", ToolInputRaw: map[string]any{"command": "git status"}}
+	token := waitInteraction(t, p, 1)
+	send("alice", "3", "allow", &MessageReference{Scope: "group", MessageID: "bot-1"}, nil)
+	send("bob", "4", "", nil, &InteractionResponse{Token: token, Action: "allow"})
+	send("alice", "5", "/new Beta", nil, nil)
+	send("bob", "6", "/switch Alpha", nil, nil)
+	send("bob", "7", "queued behind question", nil, nil)
+	noQueueSession(t, &a.queueTestAgent)
+	noInteractionDecision(t, a)
+	send("alice", "8", "", nil, &InteractionResponse{Token: token, Action: "allow"})
+	d := nextInteractionDecision(t, a)
+	if d.id != "agent-question" || d.result.Behavior != "allow" || d.result.UpdatedInput["command"] != "git status" {
+		t.Fatalf("wrong response: %+v", d)
+	}
+	send("alice", "9", "/approve "+token, nil, nil)
+	// The Agent may reuse its own request ID; the new question still gets a new nonce.
+	s.events <- Event{Type: EventPermissionRequest, RequestID: "agent-question", ToolName: "AskUserQuestion", Questions: []UserQuestion{{Question: "Target?", Options: []UserQuestionOption{{Label: "one"}, {Label: "two"}}}, {Question: "Reason?"}}, ToolInputRaw: map[string]any{"questions": []any{"original"}}}
+	next := waitInteraction(t, p, 2)
+	if next == token {
+		t.Fatal("question generation reused nonce")
+	}
+	send("alice", "10", "/approve "+token, nil, nil)
+	send("bob", "11", "/answer "+next+" 1 one", nil, nil)
+	send("alice", "12", "", nil, &InteractionResponse{Token: next, Action: "option", Question: 0, Option: 1})
+	send("alice", "13", "/answer "+next+" 1 changed", nil, nil)
+	noInteractionDecision(t, a)
+	send("alice", "14", "/answer "+next+" 2 explicit reason", nil, nil)
+	d = nextInteractionDecision(t, a)
+	answers := d.result.UpdatedInput["answers"].(map[string]any)
+	if answers["Target?"] != "two" || answers["Reason?"] != "explicit reason" {
+		t.Fatal(answers)
+	}
+	s.events <- Event{Type: EventResult, Done: true, Content: "first done"}
+	queued := nextQueueSession(t, &a.queueTestAgent)
+	<-queued.sent
+	queued.events <- Event{Type: EventResult, Done: true, Content: "queued done"}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "queued done") })
+	send("alice", "15", "ordinary default", nil, nil)
+	last := nextQueueSession(t, &a.queueTestAgent)
+	<-last.sent
+	if last.resume != "" {
+		t.Fatal("interaction changed Alice default")
+	}
+	last.events <- Event{Type: EventResult, Done: true, Content: "beta done"}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "beta done") })
+	got := strings.Join(p.getSent(), "\n")
+	if !strings.Contains(got, "git status") || !strings.Contains(got, e.i18n.T(MsgInteractionHint)) || strings.Count(got, e.i18n.T(MsgInteractionDenied)) != 2 || strings.Count(got, e.i18n.T(MsgInteractionStale)) < 3 {
+		t.Fatal(got)
+	}
+}
+
+func TestCUJ_B20_RestartTimeoutAndRevokedInteractionEntries(t *testing.T) {
+	for _, mode := range []string{"restart", "timeout", "revoked", "stop"} {
+		t.Run(mode, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "sessions")
+			a := &interactionTestAgent{queueTestAgent: queueTestAgent{dir: t.TempDir(), calls: make(chan *queueTestSession, 10)}, decisions: make(chan interactionDecision, 10)}
+			p := &interactionTestPlatform{linkTestPlatform: linkTestPlatform{queueTestPlatform: queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}}}
+			e := NewEngine("project", a, []Platform{p}, path, LangEnglish)
+			if mode == "timeout" {
+				e.maxTurnTime = 200 * time.Millisecond
+			}
+			t.Cleanup(func() { _ = e.Stop() })
+			send := func(user, id, text string, ref *MessageReference) {
+				e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: user, UserID: user, MessageID: id, Content: text, ReplyCtx: user, BotReply: ref})
+			}
+			send("alice", "1", "/new Alpha", nil)
+			send("alice", "2", "first", nil)
+			s := nextQueueSession(t, &a.queueTestAgent)
+			<-s.sent
+			s.events <- Event{Type: EventPermissionRequest, RequestID: "approval", ToolName: "Bash", ToolInput: "make build"}
+			token := waitInteraction(t, p, 1)
+			send("bob", "3", "/switch Alpha", nil)
+			send("bob", "4", "queued", nil)
+			if mode == "restart" {
+				if err := e.Stop(); err != nil {
+					t.Fatal(err)
+				}
+				e = NewEngine("project", a, []Platform{p}, path, LangEnglish)
+			}
+			if mode == "timeout" {
+				waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), e.i18n.T(MsgSharedPaused)) })
+			}
+			if mode == "revoked" {
+				p.deny("alice")
+			}
+			if mode == "stop" {
+				send("bob", "stop", "/stop", nil)
+			}
+			send("alice", "5", "/approve "+token, nil)
+			send("bob", "6", "ordinary reply to prompt", &MessageReference{Scope: "group", MessageID: "bot-1"})
+			noInteractionDecision(t, a)
+			noQueueSession(t, &a.queueTestAgent)
+			got := strings.Join(p.getSent(), "\n")
+			expected := MsgInteractionStale
+			if mode == "revoked" {
+				expected = MsgInteractionDenied
+			}
+			if !strings.Contains(got, e.i18n.T(expected)) || !strings.Contains(got, e.i18n.T(MsgInteractionHint)) {
+				t.Fatal(got)
+			}
+			send("bob", "7", "/queue", nil)
+			if got := strings.Join(p.getSent(), "\n"); !strings.Contains(got, "bob") || !strings.Contains(got, "queued") {
+				t.Fatal(got)
+			}
+			if mode == "restart" {
+				send("bob", "8", "/resolve", nil)
+				send("bob", "9", interactionResumeCommand(t, p), nil)
+				nextSession := nextQueueSession(t, &a.queueTestAgent)
+				<-nextSession.sent
+				nextSession.events <- Event{Type: EventPermissionRequest, RequestID: "approval", ToolName: "Bash", ToolInput: "make test"}
+				nextToken := waitInteraction(t, p, 2)
+				if nextToken == token {
+					t.Fatal("restart reused token")
+				}
+				send("bob", "10", "/approve "+token, nil)
+				noInteractionDecision(t, a)
+				send("bob", "11", "/approve "+nextToken, nil)
+				d := nextInteractionDecision(t, a)
+				if d.id != "approval" || d.result.Behavior != "allow" {
+					t.Fatal(d)
+				}
+				nextSession.events <- Event{Type: EventResult, Done: true, Content: "recovered queue done"}
+				waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "recovered queue done") })
+			}
+
+		})
+	}
+}

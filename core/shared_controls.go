@@ -112,6 +112,7 @@ func (e *Engine) sharedControlLocked(q *sharedQueue, scope sharedScope, msg *Mes
 		}
 		q.requests = next
 		if command == "stop" {
+			q.invalidateInteractionsLocked(r.ID)
 			if cancel := q.cancels[r.ID]; cancel != nil {
 				cancel()
 			}
@@ -154,6 +155,9 @@ func (e *Engine) sharedQueueView(q *sharedQueue, s sharedSession) string {
 			continue
 		}
 		status := e.i18n.T(queueStatusKey(r.Status))
+		if r.Waiting && r.Status == "running" {
+			status = e.i18n.T(MsgInteractionWaiting)
+		}
 		line := e.i18n.Tf(MsgQueueEntry, r.ID, r.UserID, status)
 		if r.Status == "queued" {
 			line += "\n/cancel " + r.ID
