@@ -92,7 +92,7 @@ func (e *Engine) startSharedQueue() {
 				return
 			}
 			for {
-				index, r, ok, err := q.take()
+				index, r, ok, err := e.takeAuthorizedSharedRequest()
 				if err != nil {
 					slog.Error("shared start checkpoint failed", "request", r.ID, "error", err)
 					e.sharedReply(r, e.i18n.T(MsgSharedPaused))
@@ -235,13 +235,7 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 	for {
 		select {
 		case decision := <-decisions:
-			if ctx.Err() != nil || !e.sharedInteractionAuthorized(r) {
-				return texts.String(), "", false, fmt.Errorf("interaction no longer authorized")
-			}
-			if err := q.setWaiting(r.ID, false); err != nil {
-				return texts.String(), "", false, err
-			}
-			if err := as.RespondPermission(pending.event.RequestID, decision); err != nil {
+			if err := e.deliverSharedInteraction(ctx, r, pending, decision, as); err != nil {
 				return texts.String(), "", false, err
 			}
 			pending = nil

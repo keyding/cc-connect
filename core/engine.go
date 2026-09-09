@@ -355,8 +355,10 @@ type RateLimitCfg struct {
 
 // Engine routes messages between platforms and the agent for a single project.
 type Engine struct {
-	sharedDirectory *sharedDirectory
-	sharedQueue     *sharedQueue
+	sharedDirectory           *sharedDirectory
+	sharedQueue               *sharedQueue
+	sharedMutationMu          sync.Mutex
+	sharedDeleteConfirmations map[string]sharedDeleteConfirmation
 
 	name                  string
 	agent                 Agent
@@ -2899,6 +2901,15 @@ func (e *Engine) handleMessage(p Platform, msg *Message) {
 
 	// Shared requests use stable identity and durable admission.
 	if msg.SharedScope != "" {
+		e.sharedMutationMu.Lock()
+		defer e.sharedMutationMu.Unlock()
+		if err := e.reconcileSharedAuthorizationLocked(); err != nil {
+			slog.Error("reconcile shared authorization", "error", err)
+		}
+		if !sharedUserAllowed(p, msg.SharedScope, msg.UserID) {
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgSharedAccessDenied))
+			return
+		}
 		if msg.Interaction != nil {
 			e.handleSharedInteraction(p, msg, *msg.Interaction)
 			return
@@ -6821,6 +6832,8 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 		switch cmdID {
 		case "approve", "deny", "answer":
 			e.sharedInteractionCommand(p, msg, cmdID, args)
+		case "delete":
+			e.handleSharedDelete(p, msg, args)
 		case "queue", "cancel", "stop", "resume", "resolve", "continue":
 			e.handleSharedControl(p, msg, cmdID, args)
 		case "new", "list", "switch", "name", "current":

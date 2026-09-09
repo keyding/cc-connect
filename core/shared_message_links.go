@@ -35,6 +35,15 @@ func (d *sharedDirectory) recordMessageKind(project, platform, scope, session st
 	if d.loadErr != nil {
 		return fmt.Errorf("message link state unavailable: %w", d.loadErr)
 	}
+	exists := false
+	for _, s := range d.state.Scopes[sharedScopeKey(project, platform, scope)].Sessions {
+		if s.ID == session {
+			exists = true
+		}
+	}
+	if !exists {
+		return fmt.Errorf("shared message target deleted")
+	}
 	if ref.Scope != scope || ref.MessageID == "" || ref.MessageID == "0" {
 		return fmt.Errorf("invalid message receipt")
 	}
