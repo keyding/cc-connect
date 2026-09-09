@@ -752,6 +752,7 @@ const (
 
 const (
 	MsgQueueTitle           MsgKey = "QueueTitle"
+	MsgQueueChoose          MsgKey = "queue_choose"
 	MsgQueueEntry           MsgKey = "QueueEntry"
 	MsgQueueDenied          MsgKey = "QueueDenied"
 	MsgQueueStale           MsgKey = "QueueStale"
@@ -982,6 +983,13 @@ var messages = map[MsgKey]map[Language]string{
 		LangTraditionalChinese: "無法確認此回覆所屬的可存取會話。請選擇會話後重新傳送。",
 		LangJapanese:           "この返信の会話を確認できないか、アクセスできません。会話を選択して再送してください。",
 		LangSpanish:            "No se puede vincular esta respuesta a una sesión accesible. Selecciona una sesión y vuelve a enviar.",
+	},
+	MsgQueueChoose: {
+		LangEnglish:            "No session selected. Use /list, then /switch <number, name or ID>, and run this command again.",
+		LangChinese:            "当前未选择会话。请先用 /list 查看，再用 /switch <序号、名称或 ID> 选择，然后重新执行此命令。",
+		LangTraditionalChinese: "目前未選擇會話。請先用 /list 查看，再用 /switch <序號、名稱或 ID> 選擇，然後重新執行此指令。",
+		LangJapanese:           "会話が未選択です。/list で確認し、/switch <番号・名前・ID> で選択してから、このコマンドを再実行してください。",
+		LangSpanish:            "No hay sesión seleccionada. Usa /list y /switch <número, nombre o ID>, y vuelve a ejecutar este comando.",
 	},
 	MsgQueueTitle: {
 		LangEnglish:            "Session: %s (%s)\n\nTask queue:\n",

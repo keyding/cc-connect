@@ -68,6 +68,9 @@ func (e *Engine) sharedControlLocked(q *sharedQueue, scope sharedScope, msg *Mes
 			}
 		}
 	}
+	if sessionID == "" && target == "" {
+		return e.i18n.T(MsgQueueChoose), nil
+	}
 	s, ok := visible[sessionID]
 	if !ok {
 		return e.i18n.T(MsgQueueStale), nil
