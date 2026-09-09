@@ -437,8 +437,9 @@ func (p *Platform) handleMessage(ctx context.Context, msg *models.Message) {
 	channelKey := buildChannelKey(msg.Chat.ID, threadID)
 
 	userID := strconv.FormatInt(msg.From.ID, 10)
-	if !core.AllowList(p.allowFrom, userID) {
+	if !p.allowUser(userID) {
 		slog.Debug("telegram: message from unauthorized user", "user", userID)
+		p.dispatchSharedDenial(msg.Chat, threadID, msg.From.ID, replyContext{chatID: msg.Chat.ID, threadID: threadID, messageID: msg.ID})
 		return
 	}
 
@@ -801,6 +802,10 @@ func retryLogMessage(cause retryCause) string {
 }
 
 func (p *Platform) handleCallbackQuery(ctx context.Context, cb *models.CallbackQuery) {
+	if inaccessible := cb.Message.InaccessibleMessage; inaccessible != nil && p.sharedScope(inaccessible.Chat) != "" && !p.allowUser(strconv.FormatInt(cb.From.ID, 10)) {
+		p.dispatchSharedDenial(inaccessible.Chat, 0, cb.From.ID, interactionCallbackReply{ID: cb.ID})
+		return
+	}
 	if p.handleInaccessibleSharedCallback(cb) {
 		return
 	}
@@ -820,8 +825,14 @@ func (p *Platform) handleCallbackQuery(ctx context.Context, cb *models.CallbackQ
 	msgID := msg.ID
 	userID := strconv.FormatInt(cb.From.ID, 10)
 
-	if !core.AllowList(p.allowFrom, userID) {
+	if !p.allowUser(userID) {
 		slog.Debug("telegram: callback from unauthorized user", "user", userID)
+		if p.sharedScope(msg.Chat) != "" {
+			if _, err := bot.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{CallbackQueryID: cb.ID}); err != nil {
+				slog.Warn("telegram: clear denied callback", "error", err)
+			}
+			p.dispatchSharedDenial(msg.Chat, msg.MessageThreadID, cb.From.ID, replyContext{chatID: chatID, threadID: msg.MessageThreadID, messageID: msgID})
+		}
 		return
 	}
 
@@ -1901,5 +1912,33 @@ func (p *Platform) rejectSharedAttachment(msg *models.Message, target replyConte
 
 // AuthorizeSharedControl rechecks the current allow list for bound controls.
 func (p *Platform) AuthorizeSharedControl(scope, userID string) bool {
-	return scope != "" && core.AllowList(p.allowFrom, userID)
+	return scope != "" && p.allowUser(userID)
+}
+
+// SetAllowFrom publishes a new authorization snapshot for both incoming events
+// and Engine control checks. Configuration changes do not require reconnecting.
+func (p *Platform) SetAllowFrom(allowFrom string) {
+	p.mu.Lock()
+	p.allowFrom = allowFrom
+	p.mu.Unlock()
+}
+func (p *Platform) allowUser(userID string) bool {
+	p.mu.RLock()
+	allowFrom := p.allowFrom
+	p.mu.RUnlock()
+	return core.AllowList(allowFrom, userID)
+}
+
+// A denied shared event must reach the Engine so it can reconcile this user's
+// pending work and render its localized generic denial. Deliberately omit the
+// message ID, content and attachments: even a concurrent re-grant cannot turn
+// this authorization notification into an executable task.
+func (p *Platform) dispatchSharedDenial(chat models.Chat, threadID int, userID int64, target any) {
+	scope := p.sharedScope(chat)
+	if scope == "" {
+		return
+	}
+	if handler := p.messageHandler(); handler != nil {
+		handler(p, &core.Message{Platform: "telegram", SharedScope: scope, UserID: strconv.FormatInt(userID, 10), SessionKey: p.buildSessionKey(chat.ID, threadID, userID), ReplyCtx: target})
+	}
 }
