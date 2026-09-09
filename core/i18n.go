@@ -1124,11 +1124,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "No hay sesión seleccionada. Usa /new [nombre] o /list y /switch <número, nombre o ID>, y vuelve a enviar la tarea.",
 	},
 	MsgSharedList: {
-		LangEnglish:            "💬 Shared sessions (👉 = current):",
-		LangChinese:            "💬 共享会话（👉 为当前选择）：",
-		LangTraditionalChinese: "💬 共享會話（👉 為目前選擇）：",
-		LangJapanese:           "💬 共有会話（👉 は現在の選択）：",
-		LangSpanish:            "💬 Sesiones compartidas (👉 = actual):",
+		LangEnglish:            "Shared sessions:",
+		LangChinese:            "共享会话：",
+		LangTraditionalChinese: "共享會話：",
+		LangJapanese:           "共有会話：",
+		LangSpanish:            "Sesiones compartidas:",
 	},
 	MsgSharedCurrent: {
 		LangEnglish:            "💬 Current: %s\n\n[%s] (%s)",
@@ -1299,11 +1299,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "Crear y seleccionar sesión compartida",
 	},
 	MsgSharedCmdList: {
-		LangEnglish:            "List shared sessions; 👉 marks current",
-		LangChinese:            "列出共享会话，👉 标记当前选择",
-		LangTraditionalChinese: "列出共享會話，👉 標記目前選擇",
-		LangJapanese:           "共有会話一覧、👉 は現在の選択",
-		LangSpanish:            "Listar sesiones; 👉 indica la actual",
+		LangEnglish:            "List shared sessions; current selection is highlighted",
+		LangChinese:            "列出共享会话，突出显示当前选择",
+		LangTraditionalChinese: "列出共享會話，醒目顯示目前選擇",
+		LangJapanese:           "共有会話一覧、現在の選択を強調表示",
+		LangSpanish:            "Listar sesiones; selección actual resaltada",
 	},
 	MsgSharedCmdSwitch: {
 		LangEnglish:            "Select session by number, name or ID",

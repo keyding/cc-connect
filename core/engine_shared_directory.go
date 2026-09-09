@@ -28,11 +28,11 @@ func (e *Engine) handleSharedDirectory(p Platform, msg *Message, command string,
 	if command == "list" {
 		lines := []string{e.i18n.T(MsgSharedList)}
 		for i, s := range scope.Sessions {
-			marker := ""
+			entry := fmt.Sprintf("%d. %s\n\n%s · `%s`", i+1, sharedSessionName(s.Name), s.AgentType, s.ID)
 			if s.ID == scope.Selections[msg.SessionKey] {
-				marker = "👉 "
+				entry = "> " + strings.ReplaceAll(entry, "\n", "\n> ")
 			}
-			lines = append(lines, fmt.Sprintf("%s%d. %s\n\n%s · `%s`", marker, i+1, sharedSessionName(s.Name), s.AgentType, s.ID))
+			lines = append(lines, entry)
 		}
 		if len(scope.Sessions) == 0 {
 			lines = append(lines, e.i18n.T(MsgSharedChoose))
