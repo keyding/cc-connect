@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"unicode/utf16"
 )
 
 func TestReceiptHTMLFallbackDoesNotExposeGeneratedTags(t *testing.T) {
@@ -81,6 +82,50 @@ func TestLongHistoryKeepsHTMLBalancedAcrossChunks(t *testing.T) {
 			}
 			if accepted < 2 {
 				t.Fatal("not chunked")
+			}
+		})
+	}
+}
+
+func TestLongHistoryWithEmojiRespectsTelegramLength(t *testing.T) {
+	for _, method := range []string{"reply", "receipt", "send", "buttons"} {
+		t.Run(method, func(t *testing.T) {
+			accepted := 0
+			var delivered strings.Builder
+			p := newTelegramTestPlatform(t, func(w http.ResponseWriter, r *http.Request) {
+				_ = r.ParseMultipartForm(1 << 20)
+				if len(utf16.Encode([]rune(r.FormValue("text")))) > 4096 {
+					w.WriteHeader(400)
+					fmt.Fprint(w, `{"ok":false,"error_code":400,"description":"Bad Request: message is too long"}`)
+					return
+				}
+				if r.FormValue("message_thread_id") != "4" {
+					t.Error("chunk lost Topic")
+				}
+				delivered.WriteString(r.FormValue("text"))
+				accepted++
+				fmt.Fprintf(w, `{"ok":true,"result":{"message_id":%d,"message_thread_id":4,"chat":{"id":-1001,"type":"supergroup"}}}`, accepted)
+			})
+			ctx, rc, body := context.Background(), replyContext{chatID: -1001, threadID: 4}, strings.Repeat("🤖", 5000)
+			var err error
+			switch method {
+			case "receipt":
+				err = p.ReplyWithReceipt(ctx, rc, body, func(core.MessageReference) error { return nil })
+			case "send":
+				err = p.Send(ctx, rc, body)
+			case "buttons":
+				err = p.SendWithButtons(ctx, rc, body, nil)
+			default:
+				err = p.Reply(ctx, rc, body)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if delivered.String() != body {
+				t.Error("history content lost or duplicated")
+			}
+			if accepted < 3 {
+				t.Fatalf("accepted only %d chunks", accepted)
 			}
 		})
 	}

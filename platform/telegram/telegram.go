@@ -1626,10 +1626,14 @@ func (p *Platform) UpdateMessage(ctx context.Context, previewHandle any, content
 // Telegram's limit is 4096 characters for text messages.
 const telegramMaxMessageLen = 4096
 
+// The shared splitter counts runes. Reserve two UTF-16 units per rune so
+// supplementary characters (including emoji) cannot overflow Telegram's limit.
+const telegramChunkRuneLimit = telegramMaxMessageLen / 2
+
 // sendChunked splits a message that's too long and sends it as multiple messages.
 // Split Markdown before converting each chunk so HTML tags remain balanced.
 func (p *Platform) sendChunked(ctx context.Context, bot telegramBot, rc replyContext, content string, reply *models.ReplyParameters) error {
-	chunks := core.SplitMessageCodeFenceAware(content, telegramMaxMessageLen)
+	chunks := core.SplitMessageCodeFenceAware(content, telegramChunkRuneLimit)
 	for i, chunk := range chunks {
 		params := &tgbot.SendMessageParams{
 			ChatID:          rc.chatID,
@@ -1659,7 +1663,7 @@ func (p *Platform) sendChunked(ctx context.Context, bot telegramBot, rc replyCon
 // sendChunkedWithButtons splits a message that's too long and sends it as multiple messages.
 // The first chunk includes the inline keyboard buttons.
 func (p *Platform) sendChunkedWithButtons(ctx context.Context, bot telegramBot, rc replyContext, content string, rows [][]models.InlineKeyboardButton) error {
-	chunks := core.SplitMessageCodeFenceAware(content, telegramMaxMessageLen)
+	chunks := core.SplitMessageCodeFenceAware(content, telegramChunkRuneLimit)
 	for i, chunk := range chunks {
 		params := &tgbot.SendMessageParams{
 			ChatID:          rc.chatID,
