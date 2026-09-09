@@ -28,7 +28,7 @@ func (e *Engine) handleSharedDirectory(p Platform, msg *Message, command string,
 	if command == "list" {
 		lines := []string{e.i18n.T(MsgSharedList)}
 		for i, s := range scope.Sessions {
-			entry := fmt.Sprintf("%d. %s\n\n%s · `%s`", i+1, sharedSessionName(s.Name), s.AgentType, s.ID)
+			entry := fmt.Sprintf("%d. %s\n`%s`", i+1, sharedSessionName(s.Name), s.ID)
 			if s.ID == scope.Selections[msg.SessionKey] {
 				entry = "> " + strings.ReplaceAll(entry, "\n", "\n> ")
 			}
