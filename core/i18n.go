@@ -800,10 +800,12 @@ const (
 )
 
 const (
-	MsgSharedAccessDenied  MsgKey = "SharedAccessDenied"
-	MsgSharedDeleteBusy    MsgKey = "SharedDeleteBusy"
-	MsgSharedDeleteConfirm MsgKey = "SharedDeleteConfirm"
-	MsgSharedDeleted       MsgKey = "SharedDeleted"
+	MsgSharedAccessDenied    MsgKey = "SharedAccessDenied"
+	MsgSharedDeleteBusy      MsgKey = "SharedDeleteBusy"
+	MsgSharedDeleteConfirm   MsgKey = "SharedDeleteConfirm"
+	MsgSharedDeleted         MsgKey = "SharedDeleted"
+	MsgSharedDeletePrompt    MsgKey = "SharedDeletePrompt"
+	MsgSharedDeleteCancelled MsgKey = "SharedDeleteCancelled"
 )
 
 const (
@@ -836,6 +838,21 @@ var messages = map[MsgKey]map[Language]string{
 		LangJapanese:           "共有会話 %s（%s）を削除しますか？コード、worktree、エージェント履歴は保持します。この会話の削除を確認: /delete %s confirm",
 		LangSpanish:            "¿Eliminar la sesión compartida %s (%s)? Se conservarán el código, los worktrees y el historial del agente. Confirma esta sesión: /delete %s confirm",
 	},
+	MsgSharedDeletePrompt: {
+		LangEnglish:            "Delete shared session **%s** (%s)?\n\nExisting code, worktrees and agent history will be preserved. Choose an action below.",
+		LangChinese:            "删除共享会话 **%s**（%s）？\n\n现有代码、worktree 和 Agent 历史将保留。请点击下方按钮确认或取消。",
+		LangTraditionalChinese: "刪除共享會話 **%s**（%s）？\n\n現有程式碼、worktree 和 Agent 歷史將保留。請點擊下方按鈕確認或取消。",
+		LangJapanese:           "共有会話 **%s**（%s）を削除しますか？\n\nコード、worktree、エージェント履歴は保持します。下のボタンで確認またはキャンセルしてください。",
+		LangSpanish:            "¿Eliminar la sesión compartida **%s** (%s)?\n\nSe conservarán el código, los worktrees y el historial del agente. Confirma o cancela con los botones.",
+	},
+	MsgSharedDeleteCancelled: {
+		LangEnglish:            "Deletion cancelled. The session was preserved.",
+		LangChinese:            "已取消删除，会话已保留。",
+		LangTraditionalChinese: "已取消刪除，會話已保留。",
+		LangJapanese:           "削除をキャンセルしました。会話は保持されます。",
+		LangSpanish:            "Eliminación cancelada. Se ha conservado la sesión.",
+	},
+
 	MsgSharedDeleted: {
 		LangEnglish:            "Deleted shared session %s (%s). Old message references are invalid. Existing code and agent history were preserved.",
 		LangChinese:            "已删除共享会话 %s（%s）。旧消息引用已失效，现有代码和 Agent 历史保留。",

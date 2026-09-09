@@ -25,11 +25,17 @@ func (e *Engine) handleSharedDelete(p Platform, msg *Message, args []string) {
 	sessionID := scope.Selections[msg.SessionKey]
 	var confirmation sharedDeleteConfirmation
 	confirm := len(args) == 2 && args[1] == "confirm"
-	if confirm {
+	cancel := len(args) == 2 && args[1] == "cancel"
+	if confirm || cancel {
 		var ok bool
 		confirmation, ok = e.sharedDeleteConfirmations[args[0]]
 		if !ok || confirmation.Scope != key {
 			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgQueueStale))
+			return
+		}
+		if cancel {
+			delete(e.sharedDeleteConfirmations, args[0])
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgSharedDeleteCancelled))
 			return
 		}
 		sessionID = confirmation.Session
@@ -87,7 +93,25 @@ func (e *Engine) handleSharedDelete(p Platform, msg *Message, args []string) {
 		}
 	}
 	e.sharedDeleteConfirmations[token] = sharedDeleteConfirmation{Scope: key, Session: session.ID, RequestCount: count}
-	e.reply(p, msg.ReplyCtx, e.i18n.Tf(MsgSharedDeleteConfirm, session.Name, session.ID, token))
+	e.offerSharedDelete(p, msg.ReplyCtx, session, token)
+}
+
+func (e *Engine) offerSharedDelete(p Platform, target any, session sharedSession, token string) {
+	if sender, ok := p.(InlineButtonSender); ok {
+		buttons := [][]ButtonOption{{
+			{Text: e.i18n.T(MsgDeleteModeConfirmTitle), Data: "cmd:/delete " + token + " confirm"},
+			{Text: e.i18n.T(MsgDeleteModeCancel), Data: "cmd:/delete " + token + " cancel"},
+		}}
+		if err := e.waitOutgoing(p); err != nil {
+			return
+		}
+		if err := sender.SendWithButtons(e.ctx, target, e.i18n.Tf(MsgSharedDeletePrompt, session.Name, session.ID), buttons); err == nil {
+			return
+		} else {
+			slog.Warn("send shared delete buttons", "error", err)
+		}
+	}
+	e.reply(p, target, e.i18n.Tf(MsgSharedDeleteConfirm, session.Name, session.ID, token))
 }
 
 func (q *sharedQueue) deletionState(session string) (count int, allowed bool) {

@@ -4095,3 +4095,45 @@ func TestCUJ_B21_DeleteByListNumberPreservesSelection(t *testing.T) {
 		})
 	}
 }
+
+func TestCUJ_B21_DeleteButtonsConfirmAndCancel(t *testing.T) {
+	p := &stubInlineButtonPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}
+	e := NewEngine("project", &cujAgent{}, []Platform{p}, filepath.Join(t.TempDir(), "state"), LangChinese)
+	t.Cleanup(func() { _ = e.Stop() })
+	send := func(text string) string {
+		before := len(p.getSent())
+		e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: "alice", UserID: "alice", Content: text})
+		return strings.Join(p.getSent()[before:], "\n")
+	}
+	send("/new Alpha")
+	send("/delete 1")
+	if len(p.buttonRows) != 1 || len(p.buttonRows[0]) != 2 {
+		t.Fatal("missing delete buttons")
+	}
+	if strings.Contains(p.buttonContent, "/delete") || !strings.Contains(p.buttonContent, "Alpha") {
+		t.Fatal(p.buttonContent)
+	}
+	confirm, cancel := p.buttonRows[0][0].Data, p.buttonRows[0][1].Data
+	if len(confirm) > 64 || len(cancel) > 64 {
+		t.Fatal("callback too long")
+	}
+	if got := send(strings.TrimPrefix(cancel, "cmd:")); !strings.Contains(got, e.i18n.T(MsgSharedDeleteCancelled)) {
+		t.Fatal(got)
+	}
+	if got := send("/list"); !strings.Contains(got, "Alpha") {
+		t.Fatal(got)
+	}
+	if got := send(strings.TrimPrefix(confirm, "cmd:")); !strings.Contains(got, e.i18n.T(MsgQueueStale)) {
+		t.Fatal(got)
+	}
+	send("/delete 1")
+	confirm = p.buttonRows[0][0].Data
+	send("/new Beta")
+	send(strings.TrimPrefix(confirm, "cmd:"))
+	if got := send("/list"); strings.Contains(got, "Alpha") || !strings.Contains(got, "Beta") {
+		t.Fatal(got)
+	}
+	if got := send(strings.TrimPrefix(confirm, "cmd:")); !strings.Contains(got, e.i18n.T(MsgQueueStale)) {
+		t.Fatal(got)
+	}
+}

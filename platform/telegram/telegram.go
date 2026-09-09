@@ -917,13 +917,20 @@ func (p *Platform) handleCallbackQuery(ctx context.Context, cb *models.CallbackQ
 		command := strings.TrimPrefix(data, "cmd:")
 
 		origText := msg.Text
-		if origText == "" {
-			origText = ""
+		label := command
+		if msg.ReplyMarkup != nil {
+			for _, row := range msg.ReplyMarkup.InlineKeyboard {
+				for _, button := range row {
+					if button.CallbackData == data {
+						label = button.Text
+					}
+				}
+			}
 		}
 		if _, err := bot.EditMessageText(ctx, &tgbot.EditMessageTextParams{
 			ChatID:      chatID,
 			MessageID:   msgID,
-			Text:        origText + "\n\n> " + command,
+			Text:        origText + "\n\n> " + label,
 			ReplyMarkup: emptyMarkup,
 		}); err != nil {
 			slog.Debug("telegram: callback edit failed", "error", err)
