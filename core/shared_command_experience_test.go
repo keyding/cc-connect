@@ -63,7 +63,7 @@ func TestSharedCommandMenuHelpAndDisabledCommandsAgree(t *testing.T) {
 				t.Fatalf("missing %s description in %s: %s", c.Command, lang, help)
 			}
 		}
-		if strings.Contains(help, "/delete") || strings.Contains(help, "/model") {
+		if strings.Contains(help, "/delete") || strings.Contains(help, "/compress") {
 			t.Fatal("unsupported or disabled command advertised")
 		}
 		e.SetDisabledCommands([]string{"*"})
@@ -99,4 +99,39 @@ func TestSharedAcceptanceMessagesCanHideImmediateReceiptButKeepQueueNotice(t *te
 	<-second.sent
 	second.events <- Event{Type: EventResult, Done: true, Content: "second done"}
 	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "second done") })
+}
+
+func TestSharedMenuIncludesModelAndMode(t *testing.T) {
+	p := &sharedMenuPlatform{queueTestPlatform: queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}}
+	e := NewEngine("project", &queueTestAgent{dir: t.TempDir()}, []Platform{p}, filepath.Join(t.TempDir(), "sessions"), LangEnglish)
+	t.Cleanup(func() { _ = e.Stop() })
+	menu, _ := e.menuCommandsForPlatform(p.Name())
+	for _, name := range []string{"model", "mode"} {
+		found := false
+		for _, cmd := range menu {
+			if cmd.Command == name && cmd.Description != "" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("shared Telegram command menu missing /%s", name)
+		}
+	}
+}
+
+// New built-ins must be consciously classified instead of disappearing behind
+// the shared-mode early return. See docs/shared-session-directory.md.
+func TestSharedCommandAuditCoversEveryBuiltin(t *testing.T) {
+	deferred := strings.Fields("status allow quiet provider memory cron timer heartbeat compress commands skills config doctor upgrade restart alias bind search shell show dir tts workspace web diff ps")
+	for _, cmd := range builtinCommands {
+		classified := isSharedCommand(cmd.id)
+		for _, name := range deferred {
+			if name == cmd.id {
+				classified = true
+			}
+		}
+		if !classified {
+			t.Errorf("unreviewed shared-mode command /%s", cmd.id)
+		}
+	}
 }

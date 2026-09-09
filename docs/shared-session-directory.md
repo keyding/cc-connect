@@ -86,3 +86,20 @@ shared_acceptance_messages = false    # 隐藏无需等待时的成功接收提�
 历史以发言人和完整北京时间（`YYYY-MM-DD HH:mm:ss (UTC+8)`）开头，本次正文在前，回复引用摘要在后。引用最多两行、120 字符；有可用 Telegram 群消息链接时提供“查看原消息”。每轮用户消息与助手回答之间留白，轮次之间用 `────────────` 分隔。链接遵循 [Telegram 消息链接格式](https://core.telegram.org/api/links#message-links)，不参与会话路由或授权。
 
 用户时间来自平台消息时间，助手时间为任务完成状态保存时的时间。显示名称使用消息接收时的平台名称，旧记录退回用户名或用户 ID。新记录独立保存正文和引用摘要，发给 Agent 的完整回复上下文保持不变。旧记录未保存的时间显示“时间未知”；已混合保存的引用和正文保留原文并注明旧记录，不推测拆分或补写时间。
+
+## 共享模式命令核查（2026-09-09）
+
+共享菜单共 24 个命令，菜单与 `/help` 使用同一份说明；别名仍按原解析器处理（例如 `/effort`、`/quota`、`/sessions`）。禁用配置及授权检查先于命令执行。Agent 不提供模型、权限模式、思考强度或用量能力时，对应命令明确提示不支持。
+
+| 分类 | 命令 | 行为 |
+| --- | --- | --- |
+| 共享会话与历史 | `/new /list /switch /name /current /history /delete` | 使用共享目录与持久化历史。 |
+| 队列与交互 | `/queue /cancel /stop /resume /resolve /continue /approve /deny /answer` | 使用共享请求、发起人及恢复规则。 |
+| 项目设置 | `/model /mode /reasoning` | 查看或修改项目 Agent 默认值，对之后启动的请求（包括尚未启动的排队请求）生效；运行中的请求不变。模型复用已有配置保存逻辑，模式与思考强度沿用运行时设置行为。不会清空共享历史或改变当前选择。 |
+| 通用查询与语言 | `/usage /lang /version /whoami /help` | 账号用量、界面语言、运行版本、本人平台身份及共享帮助。 |
+| 尚未适配：旧会话状态或执行 | `/status /allow /compress /bind /search /ps` | 仍依赖旧会话或执行状态，不能直接套用共享队列；状态目前用 `/current`、`/queue` 查看。 |
+| 尚未适配：自动任务及扩展入口 | `/cron /timer /heartbeat /commands /skills /alias` | 调度和扩展执行入口需要接入共享请求保存与授权。 |
+| 尚未适配：项目管理与显示 | `/quiet /provider /memory /config /doctor /tts /workspace /web` | 暂未开放完整共享模式行为；显示开关继续用配置文件。 |
+| 尚未适配：进程及工作区操作 | `/upgrade /restart /shell /show /dir /diff` | 不通过旧处理器绕过共享任务生命周期。 |
+
+测试服务器另外明确禁用了 `/shell /dir /upgrade /restart /cron`，恢复菜单不会解除这些部署设置。对尚未适配的已知命令，直接提示尚未支持并列出可用命令，不再只返回帮助造成误解。

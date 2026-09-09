@@ -22,6 +22,13 @@ var sharedCommandSpecs = []struct {
 	{"approve", MsgSharedCmdApprove},
 	{"deny", MsgSharedCmdDeny},
 	{"answer", MsgSharedCmdAnswer},
+	{"model", MsgSharedCmdModel},
+	{"mode", MsgSharedCmdMode},
+	{"reasoning", MsgSharedCmdReasoning},
+	{"usage", MsgSharedCmdUsage},
+	{"lang", MsgSharedCmdLang},
+	{"version", MsgSharedCmdVersion},
+	{"whoami", MsgSharedCmdWhoami},
 	{"help", MsgSharedCmdHelp},
 }
 

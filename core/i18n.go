@@ -699,46 +699,55 @@ const (
 )
 
 const (
-	MsgSharedProgress         MsgKey = "shared_progress"
-	MsgSharedReplyUnavailable MsgKey = "shared_reply_unavailable"
-	MsgSharedNotAccepted      MsgKey = "MsgSharedNotAccepted"
-	MsgSharedQueued           MsgKey = "MsgSharedQueued"
-	MsgSharedPaused           MsgKey = "MsgSharedPaused"
-	MsgSharedWaiting          MsgKey = "MsgSharedWaiting"
-	MsgSharedDuplicate        MsgKey = "shared_duplicate"
-	MsgSharedChoose           MsgKey = "shared_sharedchoose"
-	MsgSharedList             MsgKey = "shared_sharedlist"
-	MsgSharedCurrent          MsgKey = "shared_sharedcurrent"
-	MsgSharedNameConflict     MsgKey = "shared_sharednameconflict"
-	MsgSharedNotFound         MsgKey = "shared_sharednotfound"
-	MsgSharedNameUsage        MsgKey = "shared_sharednameusage"
-	MsgSharedUnavailable      MsgKey = "shared_sharedunavailable"
-	MsgSharedExecutionPending MsgKey = "shared_sharedexecutionpending"
-	MsgSharedCommands         MsgKey = "shared_sharedcommands"
-	MsgHistoryTimeUnknown     MsgKey = "MsgHistoryTimeUnknown"
-	MsgHistoryLegacyQuote     MsgKey = "MsgHistoryLegacyQuote"
-	MsgHistoryAuthorUnknown   MsgKey = "MsgHistoryAuthorUnknown"
-	MsgHistoryQuoteLabel      MsgKey = "MsgHistoryQuoteLabel"
-	MsgHistoryViewOriginal    MsgKey = "MsgHistoryViewOriginal"
-	MsgHistoryBot             MsgKey = "MsgHistoryBot"
-	MsgSharedHistoryHeader    MsgKey = "shared_history_header"
-	MsgSharedCmdNew           MsgKey = "shared_cmd_new"
-	MsgSharedCmdList          MsgKey = "shared_cmd_list"
-	MsgSharedCmdSwitch        MsgKey = "shared_cmd_switch"
-	MsgSharedCmdName          MsgKey = "shared_cmd_name"
-	MsgSharedCmdCurrent       MsgKey = "shared_cmd_current"
-	MsgSharedCmdHistory       MsgKey = "shared_cmd_history"
-	MsgSharedCmdQueue         MsgKey = "shared_cmd_queue"
-	MsgSharedCmdCancel        MsgKey = "shared_cmd_cancel"
-	MsgSharedCmdStop          MsgKey = "shared_cmd_stop"
-	MsgSharedCmdResume        MsgKey = "shared_cmd_resume"
-	MsgSharedCmdResolve       MsgKey = "shared_cmd_resolve"
-	MsgSharedCmdContinue      MsgKey = "shared_cmd_continue"
-	MsgSharedCmdDelete        MsgKey = "shared_cmd_delete"
-	MsgSharedCmdApprove       MsgKey = "shared_cmd_approve"
-	MsgSharedCmdDeny          MsgKey = "shared_cmd_deny"
-	MsgSharedCmdAnswer        MsgKey = "shared_cmd_answer"
-	MsgSharedCmdHelp          MsgKey = "shared_cmd_help"
+	MsgSharedProgress           MsgKey = "shared_progress"
+	MsgSharedReplyUnavailable   MsgKey = "shared_reply_unavailable"
+	MsgSharedNotAccepted        MsgKey = "MsgSharedNotAccepted"
+	MsgSharedQueued             MsgKey = "MsgSharedQueued"
+	MsgSharedPaused             MsgKey = "MsgSharedPaused"
+	MsgSharedWaiting            MsgKey = "MsgSharedWaiting"
+	MsgSharedDuplicate          MsgKey = "shared_duplicate"
+	MsgSharedChoose             MsgKey = "shared_sharedchoose"
+	MsgSharedList               MsgKey = "shared_sharedlist"
+	MsgSharedCurrent            MsgKey = "shared_sharedcurrent"
+	MsgSharedNameConflict       MsgKey = "shared_sharednameconflict"
+	MsgSharedNotFound           MsgKey = "shared_sharednotfound"
+	MsgSharedNameUsage          MsgKey = "shared_sharednameusage"
+	MsgSharedUnavailable        MsgKey = "shared_sharedunavailable"
+	MsgSharedExecutionPending   MsgKey = "shared_sharedexecutionpending"
+	MsgSharedCommands           MsgKey = "shared_sharedcommands"
+	MsgHistoryTimeUnknown       MsgKey = "MsgHistoryTimeUnknown"
+	MsgHistoryLegacyQuote       MsgKey = "MsgHistoryLegacyQuote"
+	MsgHistoryAuthorUnknown     MsgKey = "MsgHistoryAuthorUnknown"
+	MsgHistoryQuoteLabel        MsgKey = "MsgHistoryQuoteLabel"
+	MsgHistoryViewOriginal      MsgKey = "MsgHistoryViewOriginal"
+	MsgHistoryBot               MsgKey = "MsgHistoryBot"
+	MsgSharedHistoryHeader      MsgKey = "shared_history_header"
+	MsgSharedCmdModel           MsgKey = "MsgSharedCmdModel"
+	MsgSharedCmdMode            MsgKey = "MsgSharedCmdMode"
+	MsgSharedCmdReasoning       MsgKey = "MsgSharedCmdReasoning"
+	MsgSharedCmdUsage           MsgKey = "MsgSharedCmdUsage"
+	MsgSharedCmdLang            MsgKey = "MsgSharedCmdLang"
+	MsgSharedCmdVersion         MsgKey = "MsgSharedCmdVersion"
+	MsgSharedCmdWhoami          MsgKey = "MsgSharedCmdWhoami"
+	MsgSharedSettingsScope      MsgKey = "MsgSharedSettingsScope"
+	MsgSharedUnsupportedCommand MsgKey = "MsgSharedUnsupportedCommand"
+	MsgSharedCmdNew             MsgKey = "shared_cmd_new"
+	MsgSharedCmdList            MsgKey = "shared_cmd_list"
+	MsgSharedCmdSwitch          MsgKey = "shared_cmd_switch"
+	MsgSharedCmdName            MsgKey = "shared_cmd_name"
+	MsgSharedCmdCurrent         MsgKey = "shared_cmd_current"
+	MsgSharedCmdHistory         MsgKey = "shared_cmd_history"
+	MsgSharedCmdQueue           MsgKey = "shared_cmd_queue"
+	MsgSharedCmdCancel          MsgKey = "shared_cmd_cancel"
+	MsgSharedCmdStop            MsgKey = "shared_cmd_stop"
+	MsgSharedCmdResume          MsgKey = "shared_cmd_resume"
+	MsgSharedCmdResolve         MsgKey = "shared_cmd_resolve"
+	MsgSharedCmdContinue        MsgKey = "shared_cmd_continue"
+	MsgSharedCmdDelete          MsgKey = "shared_cmd_delete"
+	MsgSharedCmdApprove         MsgKey = "shared_cmd_approve"
+	MsgSharedCmdDeny            MsgKey = "shared_cmd_deny"
+	MsgSharedCmdAnswer          MsgKey = "shared_cmd_answer"
+	MsgSharedCmdHelp            MsgKey = "shared_cmd_help"
 )
 
 const (
@@ -1218,6 +1227,69 @@ var messages = map[MsgKey]map[Language]string{
 		LangTraditionalChinese: "📜 最近 %d 筆已完成對話",
 		LangJapanese:           "📜 完了した直近 %d 件",
 		LangSpanish:            "📜 últimos %d mensajes completados",
+	},
+	MsgSharedCmdModel: {
+		LangEnglish:            "View or switch project model: /model [name]",
+		LangChinese:            "查看或切换项目模型：/model [名称]",
+		LangTraditionalChinese: "查看或切換專案模型：/model [名稱]",
+		LangJapanese:           "プロジェクトのモデル表示・変更: /model [名前]",
+		LangSpanish:            "Ver o cambiar modelo del proyecto: /model [nombre]",
+	},
+	MsgSharedCmdMode: {
+		LangEnglish:            "View or switch project permission mode: /mode [mode]",
+		LangChinese:            "查看或切换项目权限模式：/mode [模式]",
+		LangTraditionalChinese: "查看或切換專案權限模式：/mode [模式]",
+		LangJapanese:           "プロジェクトの権限モード表示・変更: /mode [mode]",
+		LangSpanish:            "Ver o cambiar permisos del proyecto: /mode [modo]",
+	},
+	MsgSharedCmdReasoning: {
+		LangEnglish:            "View or switch reasoning effort: /reasoning [level]",
+		LangChinese:            "查看或切换思考强度：/reasoning [等级]",
+		LangTraditionalChinese: "查看或切換思考強度：/reasoning [等級]",
+		LangJapanese:           "推論強度の表示・変更: /reasoning [level]",
+		LangSpanish:            "Ver o cambiar esfuerzo de razonamiento: /reasoning [nivel]",
+	},
+	MsgSharedCmdUsage: {
+		LangEnglish:            "View Agent account usage, when supported",
+		LangChinese:            "查看 Agent 账号用量（需 Agent 支持）",
+		LangTraditionalChinese: "查看 Agent 帳號用量（需 Agent 支援）",
+		LangJapanese:           "Agent アカウント使用量（対応時）",
+		LangSpanish:            "Ver uso de la cuenta del Agent, si está disponible",
+	},
+	MsgSharedCmdLang: {
+		LangEnglish:            "View or change interface language: /lang [language]",
+		LangChinese:            "查看或切换界面语言：/lang [语言]",
+		LangTraditionalChinese: "查看或切換介面語言：/lang [語言]",
+		LangJapanese:           "表示言語の確認・変更: /lang [language]",
+		LangSpanish:            "Ver o cambiar idioma: /lang [idioma]",
+	},
+	MsgSharedCmdVersion: {
+		LangEnglish:            "Show running version",
+		LangChinese:            "查看运行版本",
+		LangTraditionalChinese: "查看執行版本",
+		LangJapanese:           "実行中のバージョン",
+		LangSpanish:            "Ver versión actual",
+	},
+	MsgSharedCmdWhoami: {
+		LangEnglish:            "Show your platform identity",
+		LangChinese:            "查看自己的平台身份",
+		LangTraditionalChinese: "查看自己的平台身分",
+		LangJapanese:           "自分のプラットフォーム ID",
+		LangSpanish:            "Ver tu identidad de plataforma",
+	},
+	MsgSharedSettingsScope: {
+		LangEnglish:            "Project defaults apply to requests started afterward; running requests keep their settings.",
+		LangChinese:            "项目默认设置对后续启动的请求生效；运行中的请求保持原设置。",
+		LangTraditionalChinese: "專案預設設定對之後啟動的請求生效；執行中的請求保持原設定。",
+		LangJapanese:           "プロジェクト設定は以降に開始する依頼に適用されます。実行中の依頼は変更されません。",
+		LangSpanish:            "Los valores del proyecto se aplican a solicitudes iniciadas después; las actuales conservan sus ajustes.",
+	},
+	MsgSharedUnsupportedCommand: {
+		LangEnglish:            "%s is not yet supported in shared mode. Available commands:",
+		LangChinese:            "%s 尚未适配共享模式。当前可用命令：",
+		LangTraditionalChinese: "%s 尚未適配共享模式。目前可用指令：",
+		LangJapanese:           "%s は共有モードに未対応です。利用可能なコマンド：",
+		LangSpanish:            "%s aún no está disponible en modo compartido. Comandos disponibles:",
 	},
 	MsgSharedCmdNew: {
 		LangEnglish:            "Create and select a shared session",
