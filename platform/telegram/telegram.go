@@ -1072,7 +1072,7 @@ func (p *Platform) isDirectedAtBot(msg *models.Message) bool {
 	}
 
 	// Check if replying to a message from this bot
-	if msg.ReplyToMessage != nil && msg.ReplyToMessage.From != nil {
+	if msg.ReplyToMessage != nil && msg.ReplyToMessage.From != nil && !isForumTopicRootReply(msg) {
 		slog.Debug("telegram: checking reply", "bot_id", self.ID, "reply_from_id", msg.ReplyToMessage.From.ID)
 		if msg.ReplyToMessage.From.ID == self.ID {
 			return true
