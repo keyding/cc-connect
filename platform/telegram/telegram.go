@@ -112,6 +112,7 @@ type Platform struct {
 	shareSessionInChannel  bool
 	sharedSessionDirectory bool
 	enableReactions        bool
+	reactionEmoji          string
 	replyToTrigger         bool
 	progressStyle          string // "legacy" | "compact" — telegram has no rich card, so "card" is mapped to "compact"
 	httpClient             *http.Client
@@ -167,6 +168,16 @@ func New(opts map[string]any) (core.Platform, error) {
 	shareSessionInChannel, _ := opts["share_session_in_channel"].(bool)
 	sharedSessionDirectory, _ := opts["shared_session_directory"].(bool)
 	enableReactions, _ := opts["enable_reactions"].(bool)
+	reactionEmoji := "👀"
+	if value, exists := opts["reaction_emoji"]; exists {
+		emoji, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("telegram: reaction_emoji must be a string")
+		}
+		if emoji = strings.TrimSpace(emoji); emoji != "" {
+			reactionEmoji = emoji
+		}
+	}
 	replyToTrigger, _ := opts["reply_to_trigger"].(bool)
 
 	// Default to "compact" so streaming edits work out of the box. Telegram has
@@ -194,6 +205,7 @@ func New(opts map[string]any) (core.Platform, error) {
 		shareSessionInChannel:  shareSessionInChannel,
 		sharedSessionDirectory: sharedSessionDirectory,
 		enableReactions:        enableReactions,
+		reactionEmoji:          reactionEmoji,
 		replyToTrigger:         replyToTrigger,
 		progressStyle:          progressStyle,
 		httpClient:             httpClient,
@@ -457,7 +469,7 @@ func (p *Platform) handleMessage(ctx context.Context, msg *models.Message) {
 
 	rctx := replyContext{chatID: msg.Chat.ID, threadID: threadID, messageID: msg.ID}
 	if p.enableReactions {
-		go p.reactToMessage(ctx, msg.Chat.ID, msg.ID, "⚡")
+		go p.reactToMessage(ctx, msg.Chat.ID, msg.ID, p.reactionEmoji)
 	}
 	botName := p.botUsername()
 

@@ -25,6 +25,8 @@ type = "telegram"
 [projects.platforms.options]
 # shared_session_directory = false # Opt-in shared directory, durable queue and explicit controls; see docs/shared-session-directory.md
 # share_session_in_channel = false # false: each user per Topic; true: common selection per Topic
+# enable_reactions = false # React to incoming messages / 收到消息时添加回应
+# reaction_emoji = "👀" # Default when omitted or blank; use a Telegram-supported reaction enabled in your chat / 默认 👀，需群组允许该回应
 # reply_to_trigger = false # Reply to the triggering message / 引用触发消息
 token = "${TELEGRAM_BOT_TOKEN}"
 allow_from = "${TELEGRAM_ALLOW_FROM}" # Telegram numeric user IDs, comma-separated
