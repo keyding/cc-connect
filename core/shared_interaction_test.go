@@ -217,3 +217,57 @@ func sharedQuestionReplyInvalidation(t *testing.T) {
 		})
 	}
 }
+
+// The message is visible before its send receipt is processed.
+type earlyInteractionPlatform struct {
+	interactionTestPlatform
+	onVisible func(string, [][]ButtonOption)
+}
+
+func (p *earlyInteractionPlatform) SendWithButtonsWithReceipt(ctx context.Context, target any, text string, buttons [][]ButtonOption, record func(MessageReference) error) error {
+	return p.interactionTestPlatform.SendWithButtonsWithReceipt(ctx, target, text, buttons, func(ref MessageReference) error {
+		p.onVisible(text, buttons)
+		return record(ref)
+	})
+}
+
+func TestSharedInteractionResponseBeforeSendReceipt(t *testing.T) {
+	for _, kind := range []string{"approval", "single choice", "fallback"} {
+		t.Run(kind, func(t *testing.T) {
+			a := &interactionTestAgent{queueTestAgent: queueTestAgent{dir: t.TempDir(), calls: make(chan *queueTestSession, 10)}, decisions: make(chan interactionDecision, 10)}
+			p := &earlyInteractionPlatform{interactionTestPlatform: interactionTestPlatform{linkTestPlatform: linkTestPlatform{queueTestPlatform: queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}}}}
+			e := NewEngine("project", a, []Platform{p}, filepath.Join(t.TempDir(), "sessions"), LangEnglish)
+			t.Cleanup(func() { _ = e.Stop() })
+			p.onVisible = func(text string, buttons [][]ButtonOption) {
+				token := strings.Split(buttons[0][0].Data, ":")[1]
+				msg := &Message{Platform: "test", SharedScope: "group", SessionKey: "alice", UserID: "alice", MessageID: "answer", ReplyCtx: "alice"}
+				switch kind {
+				case "approval":
+					msg.Interaction = &InteractionResponse{Token: token, Action: "allow"}
+				case "single choice":
+					msg.Interaction = &InteractionResponse{Token: token, Action: "option", Question: 0, Option: 0}
+				default:
+					msg.Content = "/answer " + token + " 1 first"
+				}
+				e.ReceiveMessage(p, msg)
+			}
+			for i, text := range []string{"/new Alpha", "work"} {
+				e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: "alice", UserID: "alice", MessageID: fmt.Sprint(i), Content: text, ReplyCtx: "alice"})
+			}
+			run := nextQueueSession(t, &a.queueTestAgent)
+			<-run.sent
+			event := Event{Type: EventPermissionRequest, RequestID: "early", ToolName: "Bash"}
+			if kind != "approval" {
+				event.ToolName = "AskUserQuestion"
+				event.Questions = []UserQuestion{{Question: "Choice?", Options: []UserQuestionOption{{Label: "first"}}}}
+			}
+			run.events <- event
+			d := nextInteractionDecision(t, a)
+			if d.id != "early" || d.result.Behavior != "allow" {
+				t.Fatal(d)
+			}
+			run.events <- Event{Type: EventResult, Content: "completed", Done: true}
+			waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "completed") })
+		})
+	}
+}

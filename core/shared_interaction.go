@@ -28,6 +28,7 @@ type sharedInteraction struct {
 	ctx       context.Context
 	answers   map[int]string
 	replies   map[string]int        // message key -> question index; -1 is an approval prompt
+	responded bool                  // protected by sharedQueue.mu; accepted response may precede send receipt
 	decisions chan PermissionResult // one accepted response; receiver owns lifecycle, never closed
 }
 
@@ -93,6 +94,12 @@ func (e *Engine) sendSharedInteraction(pending *sharedInteraction) error {
 	}
 	if len(pending.event.Questions) > 0 {
 		for i := range pending.event.Questions {
+			e.sharedQueue.mu.Lock()
+			responded := pending.responded
+			e.sharedQueue.mu.Unlock()
+			if responded {
+				return nil
+			}
 			if err := e.sendSharedQuestion(p.Platform, target, pending, i); err != nil {
 				return err
 			}
@@ -150,7 +157,13 @@ func (e *Engine) sendSharedInteractionMessage(p Platform, target any, pending *s
 		q := e.sharedQueue
 		q.mu.Lock()
 		defer q.mu.Unlock()
-		if q.interactions[pending.token] != pending || pending.ctx.Err() != nil {
+		if pending.ctx.Err() != nil {
+			return fmt.Errorf("interaction expired during publication")
+		}
+		if pending.responded {
+			return nil
+		}
+		if q.interactions[pending.token] != pending {
 			return fmt.Errorf("interaction expired during publication")
 		}
 		if pending.replies == nil {
@@ -262,6 +275,7 @@ func (e *Engine) acceptSharedInteractionLocked(q *sharedQueue, msg *Message, res
 		}
 		result.UpdatedInput = buildAskQuestionResponse(pending.event.ToolInputRaw, pending.event.Questions, pending.answers)
 	}
+	pending.responded = true
 	delete(q.interactions, response.Token)
 	pending.decisions <- result
 	return MsgInteractionReceived
