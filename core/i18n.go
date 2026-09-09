@@ -715,6 +715,24 @@ const (
 	MsgSharedUnavailable      MsgKey = "shared_sharedunavailable"
 	MsgSharedExecutionPending MsgKey = "shared_sharedexecutionpending"
 	MsgSharedCommands         MsgKey = "shared_sharedcommands"
+	MsgSharedHistoryHeader    MsgKey = "shared_history_header"
+	MsgSharedCmdNew           MsgKey = "shared_cmd_new"
+	MsgSharedCmdList          MsgKey = "shared_cmd_list"
+	MsgSharedCmdSwitch        MsgKey = "shared_cmd_switch"
+	MsgSharedCmdName          MsgKey = "shared_cmd_name"
+	MsgSharedCmdCurrent       MsgKey = "shared_cmd_current"
+	MsgSharedCmdHistory       MsgKey = "shared_cmd_history"
+	MsgSharedCmdQueue         MsgKey = "shared_cmd_queue"
+	MsgSharedCmdCancel        MsgKey = "shared_cmd_cancel"
+	MsgSharedCmdStop          MsgKey = "shared_cmd_stop"
+	MsgSharedCmdResume        MsgKey = "shared_cmd_resume"
+	MsgSharedCmdResolve       MsgKey = "shared_cmd_resolve"
+	MsgSharedCmdContinue      MsgKey = "shared_cmd_continue"
+	MsgSharedCmdDelete        MsgKey = "shared_cmd_delete"
+	MsgSharedCmdApprove       MsgKey = "shared_cmd_approve"
+	MsgSharedCmdDeny          MsgKey = "shared_cmd_deny"
+	MsgSharedCmdAnswer        MsgKey = "shared_cmd_answer"
+	MsgSharedCmdHelp          MsgKey = "shared_cmd_help"
 )
 
 const (
@@ -1091,11 +1109,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "No hay sesión seleccionada. Usa /new [nombre] o /list y /switch <número, nombre o ID>, y vuelve a enviar la tarea.",
 	},
 	MsgSharedList: {
-		LangEnglish:            "Shared sessions (* = current):",
-		LangChinese:            "共享会话（* 为当前选择）：",
-		LangTraditionalChinese: "共享會話（* 為目前選擇）：",
-		LangJapanese:           "共有会話（* は現在の選択）：",
-		LangSpanish:            "Sesiones compartidas (* = actual):",
+		LangEnglish:            "Shared sessions (👉 = current):",
+		LangChinese:            "共享会话（👉 为当前选择）：",
+		LangTraditionalChinese: "共享會話（👉 為目前選擇）：",
+		LangJapanese:           "共有会話（👉 は現在の選択）：",
+		LangSpanish:            "Sesiones compartidas (👉 = actual):",
 	},
 	MsgSharedCurrent: {
 		LangEnglish:            "Current: %s [%s] (%s)",
@@ -1140,11 +1158,137 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "La ejecución compartida no está disponible en esta vista previa. La tarea no se aceptó ni guardó.",
 	},
 	MsgSharedCommands: {
-		LangEnglish:            "Shared mode supports /new, /list, /switch, /name and /current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete.",
-		LangChinese:            "共享模式支持 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete。",
-		LangTraditionalChinese: "共享模式支援 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete。",
-		LangJapanese:           "共有モードは /new、/list、/switch、/name、/current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete に対応しています。",
-		LangSpanish:            "El modo compartido admite /new, /list, /switch, /name y /current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete.",
+		LangEnglish:            "Shared mode commands:",
+		LangChinese:            "共享模式命令：",
+		LangTraditionalChinese: "共享模式指令：",
+		LangJapanese:           "共有モードのコマンド：",
+		LangSpanish:            "Comandos del modo compartido:",
+	},
+	MsgSharedHistoryHeader: {
+		LangEnglish:            "📜 %s — last %d completed messages",
+		LangChinese:            "📜 %s — 最近 %d 条已完成对话",
+		LangTraditionalChinese: "📜 %s — 最近 %d 筆已完成對話",
+		LangJapanese:           "📜 %s — 完了した直近 %d 件",
+		LangSpanish:            "📜 %s — últimos %d mensajes completados",
+	},
+	MsgSharedCmdNew: {
+		LangEnglish:            "Create and select a shared session",
+		LangChinese:            "创建并选择共享会话",
+		LangTraditionalChinese: "建立並選擇共享會話",
+		LangJapanese:           "共有会話を作成して選択",
+		LangSpanish:            "Crear y seleccionar sesión compartida",
+	},
+	MsgSharedCmdList: {
+		LangEnglish:            "List shared sessions; 👉 marks current",
+		LangChinese:            "列出共享会话，👉 标记当前选择",
+		LangTraditionalChinese: "列出共享會話，👉 標記目前選擇",
+		LangJapanese:           "共有会話一覧、👉 は現在の選択",
+		LangSpanish:            "Listar sesiones; 👉 indica la actual",
+	},
+	MsgSharedCmdSwitch: {
+		LangEnglish:            "Select session by number, name or ID",
+		LangChinese:            "按序号、名称或 ID 切换会话",
+		LangTraditionalChinese: "依序號、名稱或 ID 切換會話",
+		LangJapanese:           "番号・名前・IDで会話を選択",
+		LangSpanish:            "Elegir sesión por número, nombre o ID",
+	},
+	MsgSharedCmdName: {
+		LangEnglish:            "Rename selected session; alias /rename",
+		LangChinese:            "重命名当前会话，也可用 /rename",
+		LangTraditionalChinese: "重新命名目前會話，也可用 /rename",
+		LangJapanese:           "会話名を変更、/rename も使用可",
+		LangSpanish:            "Renombrar sesión; alias /rename",
+	},
+	MsgSharedCmdCurrent: {
+		LangEnglish:            "Show the current session selection",
+		LangChinese:            "显示当前选择的会话",
+		LangTraditionalChinese: "顯示目前選擇的會話",
+		LangJapanese:           "現在選択中の会話を表示",
+		LangSpanish:            "Mostrar la sesión seleccionada",
+	},
+	MsgSharedCmdHistory: {
+		LangEnglish:            "Show completed history: /history [count]",
+		LangChinese:            "查看已完成对话：/history [条数]",
+		LangTraditionalChinese: "查看已完成對話：/history [筆數]",
+		LangJapanese:           "完了した履歴: /history [件数]",
+		LangSpanish:            "Ver historial completado: /history [n]",
+	},
+	MsgSharedCmdQueue: {
+		LangEnglish:            "Show tasks: /queue [session ID]",
+		LangChinese:            "查看队列：/queue [会话 ID]",
+		LangTraditionalChinese: "查看佇列：/queue [會話 ID]",
+		LangJapanese:           "タスク一覧: /queue [会話ID]",
+		LangSpanish:            "Ver tareas: /queue [ID de sesión]",
+	},
+	MsgSharedCmdCancel: {
+		LangEnglish:            "Cancel your queued task: /cancel [ID]",
+		LangChinese:            "取消自己未开始的任务：/cancel [请求 ID]",
+		LangTraditionalChinese: "取消自己未開始的任務：/cancel [請求 ID]",
+		LangJapanese:           "自分の待機タスク取消: /cancel [ID]",
+		LangSpanish:            "Cancelar tu tarea pendiente: /cancel [ID]",
+	},
+	MsgSharedCmdStop: {
+		LangEnglish:            "Stop a running task; keep queued tasks",
+		LangChinese:            "停止运行任务，保留后续队列",
+		LangTraditionalChinese: "停止執行中任務，保留後續佇列",
+		LangJapanese:           "実行中を停止し待機タスクは保持",
+		LangSpanish:            "Detener tarea y conservar la cola",
+	},
+	MsgSharedCmdResume: {
+		LangEnglish:            "Resume unstarted tasks: /resume <ID>",
+		LangChinese:            "恢复未开始队列：/resume <请求 ID>",
+		LangTraditionalChinese: "恢復未開始佇列：/resume <請求 ID>",
+		LangJapanese:           "未開始タスクを再開: /resume <ID>",
+		LangSpanish:            "Reanudar tareas pendientes: /resume <ID>",
+	},
+	MsgSharedCmdResolve: {
+		LangEnglish:            "Resolve interruption; preserve results",
+		LangChinese:            "结束中断任务并保留成果，不自动恢复队列",
+		LangTraditionalChinese: "結束中斷任務並保留成果，不自動恢復佇列",
+		LangJapanese:           "中断を解決して成果を保持、待機は継続",
+		LangSpanish:            "Resolver interrupción conservando resultados",
+	},
+	MsgSharedCmdContinue: {
+		LangEnglish:            "Review risks before continuing a task",
+		LangChinese:            "查看继续中断任务的风险与支持情况",
+		LangTraditionalChinese: "查看繼續中斷任務的風險與支援情況",
+		LangJapanese:           "中断タスク継続のリスクと対応状況を確認",
+		LangSpanish:            "Consultar riesgos antes de continuar",
+	},
+	MsgSharedCmdDelete: {
+		LangEnglish:            "Confirm deletion of an idle session",
+		LangChinese:            "确认删除无待处理任务的会话",
+		LangTraditionalChinese: "確認刪除無待處理任務的會話",
+		LangJapanese:           "未処理タスクのない会話を確認して削除",
+		LangSpanish:            "Confirmar borrado de sesión sin tareas",
+	},
+	MsgSharedCmdApprove: {
+		LangEnglish:            "Requester only: /approve <token>",
+		LangChinese:            "仅发起人可批准：/approve <令牌>",
+		LangTraditionalChinese: "僅發起人可批准：/approve <權杖>",
+		LangJapanese:           "依頼者のみ承認: /approve <トークン>",
+		LangSpanish:            "Solo solicitante: /approve <token>",
+	},
+	MsgSharedCmdDeny: {
+		LangEnglish:            "Requester only: /deny <token>",
+		LangChinese:            "仅发起人可拒绝：/deny <令牌>",
+		LangTraditionalChinese: "僅發起人可拒絕：/deny <權杖>",
+		LangJapanese:           "依頼者のみ拒否: /deny <トークン>",
+		LangSpanish:            "Solo solicitante: /deny <token>",
+	},
+	MsgSharedCmdAnswer: {
+		LangEnglish:            "Reply to a question using its command",
+		LangChinese:            "按提问提示的 /answer 命令回答",
+		LangTraditionalChinese: "依提問提示的 /answer 指令回答",
+		LangJapanese:           "質問に表示された /answer コマンドで回答",
+		LangSpanish:            "Responder con el comando /answer mostrado",
+	},
+	MsgSharedCmdHelp: {
+		LangEnglish:            "Show supported shared commands",
+		LangChinese:            "查看共享模式命令说明",
+		LangTraditionalChinese: "查看共享模式指令說明",
+		LangJapanese:           "共有モードのコマンド説明",
+		LangSpanish:            "Mostrar ayuda de comandos compartidos",
 	},
 
 	MsgStarting: {

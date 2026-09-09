@@ -561,14 +561,15 @@ func main() {
 			mode, tm, tool, tmlen, toollen, _, _, hideAgentFooter := config.EffectiveDisplay(cfg, &proj)
 			historyMaxLen := config.EffectiveHistoryMaxLen(cfg, &proj)
 			engine.SetDisplayConfig(core.DisplayCfg{
-				Mode:             mode,
-				CardMode:         config.EffectiveCardMode(cfg, &proj),
-				ThinkingMessages: tm,
-				ThinkingMaxLen:   tmlen,
-				ToolMaxLen:       toollen,
-				ToolMessages:     tool,
-				HistoryMaxLen:    &historyMaxLen,
-				HideAgentFooter:  hideAgentFooter,
+				SharedAcceptanceMessages: config.EffectiveSharedAcceptanceMessages(cfg, &proj),
+				Mode:                     mode,
+				CardMode:                 config.EffectiveCardMode(cfg, &proj),
+				ThinkingMessages:         tm,
+				ThinkingMaxLen:           tmlen,
+				ToolMaxLen:               toollen,
+				ToolMessages:             tool,
+				HistoryMaxLen:            &historyMaxLen,
+				HideAgentFooter:          hideAgentFooter,
 			})
 		}
 
@@ -1729,14 +1730,15 @@ func reloadConfig(configPath, projName string, engine *core.Engine) (*core.Confi
 	mode, tm, tool, tmlen, toollen, showCtx, showFooter, hideAgentFooter := config.EffectiveDisplay(cfg, proj)
 	historyMaxLen := config.EffectiveHistoryMaxLen(cfg, proj)
 	engine.SetDisplayConfig(core.DisplayCfg{
-		Mode:             mode,
-		CardMode:         config.EffectiveCardMode(cfg, proj),
-		ThinkingMessages: tm,
-		ThinkingMaxLen:   tmlen,
-		ToolMaxLen:       toollen,
-		ToolMessages:     tool,
-		HistoryMaxLen:    &historyMaxLen,
-		HideAgentFooter:  hideAgentFooter,
+		SharedAcceptanceMessages: config.EffectiveSharedAcceptanceMessages(cfg, proj),
+		Mode:                     mode,
+		CardMode:                 config.EffectiveCardMode(cfg, proj),
+		ThinkingMessages:         tm,
+		ThinkingMaxLen:           tmlen,
+		ToolMaxLen:               toollen,
+		ToolMessages:             tool,
+		HistoryMaxLen:            &historyMaxLen,
+		HideAgentFooter:          hideAgentFooter,
 	})
 	result.DisplayUpdated = true
 

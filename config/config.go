@@ -192,16 +192,17 @@ const (
 
 // DisplayConfig controls how intermediate messages (thinking, tool output) are shown.
 type DisplayConfig struct {
-	Mode                 *string `toml:"mode"`                   // "full" (default), "compact", or "quiet"
-	CardMode             *string `toml:"card_mode"`              // "legacy" (default) or "rich" (Card 2.0 Feishu)
-	ThinkingMessages     *bool   `toml:"thinking_messages"`      // whether thinking messages are shown; default true
-	ThinkingMaxLen       *int    `toml:"thinking_max_len"`       // max chars for thinking messages; 0 = no truncation; default 300
-	ToolMaxLen           *int    `toml:"tool_max_len"`           // max chars for tool use messages; 0 = no truncation; default 500
-	ToolMessages         *bool   `toml:"tool_messages"`          // whether tool progress messages are shown; default true
-	HistoryMaxLen        *int    `toml:"history_max_len"`        // max chars per /history entry; 0 = no truncation; default 1000
-	ShowContextIndicator *bool   `toml:"show_context_indicator"` // whether [ctx: ~N%] suffix is shown; default true
-	ReplyFooter          *bool   `toml:"reply_footer"`           // whether Codex-like footer is shown; default true
-	HideAgentFooter      *bool   `toml:"hide_agent_footer"`      // strip agent-emitted model/token footer lines; default false
+	SharedAcceptanceMessages *bool   `toml:"shared_acceptance_messages"` // default true; queue/pause notices remain when false
+	Mode                     *string `toml:"mode"`                       // "full" (default), "compact", or "quiet"
+	CardMode                 *string `toml:"card_mode"`                  // "legacy" (default) or "rich" (Card 2.0 Feishu)
+	ThinkingMessages         *bool   `toml:"thinking_messages"`          // whether thinking messages are shown; default true
+	ThinkingMaxLen           *int    `toml:"thinking_max_len"`           // max chars for thinking messages; 0 = no truncation; default 300
+	ToolMaxLen               *int    `toml:"tool_max_len"`               // max chars for tool use messages; 0 = no truncation; default 500
+	ToolMessages             *bool   `toml:"tool_messages"`              // whether tool progress messages are shown; default true
+	HistoryMaxLen            *int    `toml:"history_max_len"`            // max chars per /history entry; 0 = no truncation; default 1000
+	ShowContextIndicator     *bool   `toml:"show_context_indicator"`     // whether [ctx: ~N%] suffix is shown; default true
+	ReplyFooter              *bool   `toml:"reply_footer"`               // whether Codex-like footer is shown; default true
+	HideAgentFooter          *bool   `toml:"hide_agent_footer"`          // strip agent-emitted model/token footer lines; default false
 }
 
 // StreamPreviewConfig controls real-time streaming preview in IM.
@@ -3981,4 +3982,13 @@ func orDefault(v, d int) int {
 		return d
 	}
 	return v
+}
+
+// EffectiveSharedAcceptanceMessages returns the configured immediate receipt policy.
+// Nil retains the default enabled behavior.
+func EffectiveSharedAcceptanceMessages(cfg *Config, proj *ProjectConfig) *bool {
+	if proj != nil && proj.Display != nil && proj.Display.SharedAcceptanceMessages != nil {
+		return proj.Display.SharedAcceptanceMessages
+	}
+	return cfg.Display.SharedAcceptanceMessages
 }

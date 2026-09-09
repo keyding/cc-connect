@@ -56,7 +56,9 @@ func (e *Engine) acceptSharedRequest(p Platform, msg *Message, s sharedSession) 
 	if paused {
 		text += "\n" + e.i18n.T(MsgSharedPaused)
 	}
-	e.reply(p, msg.ReplyCtx, text)
+	if e.display.SharedAcceptanceMessages == nil || *e.display.SharedAcceptanceMessages || ahead > 0 || paused {
+		e.reply(p, msg.ReplyCtx, text)
+	}
 	e.startSharedQueue()
 }
 
@@ -281,7 +283,9 @@ func (e *Engine) collectSharedAgentOutput(ctx context.Context, r sharedRequest, 
 					previewed = texts.Len()
 				}
 			case EventToolUse:
-				e.sharedReply(r, e.i18n.Tf(MsgSharedProgress, event.ToolName))
+				if e.display.ToolMessages {
+					e.sharedReply(r, e.i18n.Tf(MsgSharedProgress, event.ToolName))
+				}
 			case EventError:
 				return texts.String(), fmt.Errorf("agent execution failed: %v", event.Error)
 			case EventPermissionRequest:

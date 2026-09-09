@@ -3474,3 +3474,21 @@ func TestRemoveGlobalProvider_CleansUpProviderRefs(t *testing.T) {
 		t.Errorf("proj2 provider_refs: want [], got %v", refs2)
 	}
 }
+
+func TestSharedAcceptanceMessagesConfigOverrides(t *testing.T) {
+	var cfg Config
+	if _, err := toml.Decode("[display]\nshared_acceptance_messages = false\n", &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if p := EffectiveSharedAcceptanceMessages(&cfg, nil); p == nil || *p {
+		t.Fatal("global setting ignored")
+	}
+	enabled := true
+	proj := &ProjectConfig{Display: &DisplayConfig{SharedAcceptanceMessages: &enabled}}
+	if p := EffectiveSharedAcceptanceMessages(&cfg, proj); p == nil || !*p {
+		t.Fatal("project override ignored")
+	}
+	if EffectiveSharedAcceptanceMessages(&Config{}, nil) != nil {
+		t.Fatal("default changed")
+	}
+}
