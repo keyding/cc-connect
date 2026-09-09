@@ -3790,3 +3790,41 @@ func TestCUJ_B21_RestartRechecksQueuedRequestOwnersBeforeDispatch(t *testing.T) 
 		t.Fatal(got)
 	}
 }
+
+func TestCUJ_B19_SharedReplyPreservesModelAndContextFooter(t *testing.T) {
+	for _, tc := range []struct {
+		name                   string
+		enabled, showContext   bool
+		usage                  *ContextUsage
+		wantModel, wantContext bool
+	}{
+		{"reported context", true, true, &ContextUsage{UsedTokens: 32000, ContextWindow: 200000}, true, true},
+		{"footer disabled", false, true, &ContextUsage{UsedTokens: 32000, ContextWindow: 200000}, false, false},
+		{"context indicator disabled", true, false, &ContextUsage{UsedTokens: 32000, ContextWindow: 200000}, false, false},
+		{"unknown context", true, true, nil, true, false},
+		{"estimated context", true, true, &ContextUsage{UsedTokens: 32000, ContextWindow: 200000, ContextWindowEstimated: true}, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &sharedFooterAgent{queueTestAgent: queueTestAgent{dir: t.TempDir(), calls: make(chan *queueTestSession, 10)}, usage: tc.usage}
+			p := &sharedFooterPlatform{linkTestPlatform{queueTestPlatform: queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}}}
+			e := NewEngine("project", a, []Platform{p}, filepath.Join(t.TempDir(), "sessions"), LangChinese)
+			e.SetReplyFooterEnabled(tc.enabled)
+			e.SetShowContextIndicator(tc.showContext)
+			t.Cleanup(func() { _ = e.Stop() })
+			send := func(id, text string) {
+				e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: "alice", UserID: "alice", MessageID: id, Content: text, ReplyCtx: "alice"})
+			}
+			send("1", "/new test")
+			send("2", "/current")
+			send("3", "hello")
+			session := nextQueueSession(t, &a.queueTestAgent)
+			<-session.sent
+			session.events <- Event{Type: EventResult, Done: true, Content: "answer"}
+			waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "answer") })
+			got := strings.Join(p.getSent(), "\n")
+			if strings.Contains(got, "reported-model") != tc.wantModel || strings.Contains(got, "上下文 32.0k / 200.0k（16%）") != tc.wantContext {
+				t.Fatalf("incorrect reply footer: %s", got)
+			}
+		})
+	}
+}
