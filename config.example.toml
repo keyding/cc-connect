@@ -23,13 +23,15 @@ mode = "default"
 type = "telegram"
 
 [projects.platforms.options]
-# shared_session_directory = false # Opt-in shared directory and durable queue; shared controls/recovery are not yet available
+# shared_session_directory = false # Opt-in shared directory, durable queue and explicit controls; see docs/shared-session-directory.md
 # share_session_in_channel = false # false: each user per Topic; true: common selection per Topic
 # reply_to_trigger = false # Reply to the triggering message / 引用触发消息
 token = "${TELEGRAM_BOT_TOKEN}"
 allow_from = "${TELEGRAM_ALLOW_FROM}" # Telegram numeric user IDs, comma-separated
 
 # To use Codex instead, change agent type above to "codex" and mode to "suggest".
+# Codex exec (default) has no interactive approval IPC; use backend = "app_server"
+# in agent.options for local interactive approvals. / 本地交互审批需 app_server。
 # 使用 Codex：将上面的 agent type 改为 "codex"，mode 改为 "suggest"。
 # To run both, uncomment this project and use a DIFFERENT bot token.
 # 同时运行两个 agent：取消下方注释，并使用另一个 Bot Token，避免重复轮询。
@@ -43,10 +45,13 @@ allow_from = "${TELEGRAM_ALLOW_FROM}" # Telegram numeric user IDs, comma-separat
 # [projects.agent.options]
 # work_dir = "/path/to/project"
 # mode = "suggest"
+# backend = "app_server" # Optional local interactive approvals; default is exec
 #
 # [[projects.platforms]]
 # type = "telegram"
 #
 # [projects.platforms.options]
+# shared_session_directory = true # Requires the independent new data_dir above
+# share_session_in_channel = false
 # token = "${CODEX_TELEGRAM_BOT_TOKEN}"
 # allow_from = "${TELEGRAM_ALLOW_FROM}"

@@ -355,8 +355,10 @@ type RateLimitCfg struct {
 
 // Engine routes messages between platforms and the agent for a single project.
 type Engine struct {
-	sharedDirectory *sharedDirectory
-	sharedQueue     *sharedQueue
+	sharedDirectory           *sharedDirectory
+	sharedQueue               *sharedQueue
+	sharedMutationMu          sync.Mutex
+	sharedDeleteConfirmations map[string]sharedDeleteConfirmation
 
 	name                  string
 	agent                 Agent
@@ -2899,6 +2901,23 @@ func (e *Engine) handleMessage(p Platform, msg *Message) {
 
 	// Shared requests use stable identity and durable admission.
 	if msg.SharedScope != "" {
+		e.sharedMutationMu.Lock()
+		defer e.sharedMutationMu.Unlock()
+		if err := e.reconcileSharedAuthorizationLocked(); err != nil {
+			slog.Error("reconcile shared authorization", "error", err)
+		}
+		if !sharedUserAllowed(p, msg.SharedScope, msg.UserID) {
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgSharedAccessDenied))
+			return
+		}
+		if msg.Interaction != nil {
+			e.handleSharedInteraction(p, msg, *msg.Interaction)
+			return
+		}
+		if msg.IsPermissionResponse {
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgInteractionStale))
+			return
+		}
 		if msg.AttachmentError != nil {
 			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgSharedNotAccepted))
 			return
@@ -6772,6 +6791,9 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 	args := parts[1:]
 
 	cmdID := matchPrefix(cmd, builtinCommands)
+	if msg.SharedScope != "" && (cmd == "approve" || cmd == "deny" || cmd == "answer" || cmd == "queue" || cmd == "cancel" || cmd == "resume" || cmd == "resolve" || cmd == "continue") {
+		cmdID = cmd
+	}
 
 	// Resolve effective disabled commands: role-based if available, else project-level
 	e.userRolesMu.RLock()
@@ -6808,6 +6830,12 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 
 	if msg.SharedScope != "" {
 		switch cmdID {
+		case "approve", "deny", "answer":
+			e.sharedInteractionCommand(p, msg, cmdID, args)
+		case "delete":
+			e.handleSharedDelete(p, msg, args)
+		case "queue", "cancel", "stop", "resume", "resolve", "continue":
+			e.handleSharedControl(p, msg, cmdID, args)
 		case "new", "list", "switch", "name", "current":
 			e.handleSharedDirectory(p, msg, cmdID, args)
 		default:
@@ -11413,6 +11441,9 @@ type sendTarget struct {
 }
 
 func (e *Engine) SendToSessionInWorkDir(sessionKey, message string, images []ImageAttachment, files []FileAttachment, workDir string, atUsers []string, atAll bool) error {
+	if strings.HasPrefix(sessionKey, "shared-request:") {
+		return fmt.Errorf("shared output cannot change its request workspace")
+	}
 	if message == "" && len(images) == 0 && len(files) == 0 {
 		return fmt.Errorf("message or attachment is required")
 	}
@@ -11784,6 +11815,10 @@ func videoFormatHint(v FileAttachment) string {
 }
 
 func (e *Engine) resolveOutboundSessionTarget(sessionKey string, hasAttachments bool) (*interactiveState, Platform, any, error) {
+	if strings.HasPrefix(sessionKey, "shared-request:") {
+		p, target, err := e.resolveSharedOutput(sessionKey)
+		return nil, p, target, err
+	}
 	e.interactiveMu.Lock()
 
 	var state *interactiveState

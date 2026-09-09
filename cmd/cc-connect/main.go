@@ -1834,6 +1834,18 @@ func reloadConfig(configPath, projName string, engine *core.Engine) (*core.Confi
 	// Reload disabled commands
 	engine.SetDisabledCommands(proj.DisabledCommands)
 
+	// Apply platform access changes before any queued shared request can dispatch.
+	allowlists := map[string]string{}
+	for _, platform := range proj.Platforms {
+		value, _ := platform.Options["allow_from"].(string)
+		allowlists[platform.Type] = value
+	}
+	if restart, err := engine.SetPlatformAllowFrom(allowlists); err != nil {
+		return nil, fmt.Errorf("reload platform authorization: %w", err)
+	} else if restart {
+		slog.Warn("some platform authorization changes require restart", "project", projName)
+	}
+
 	// Reload admin allowlist
 	engine.SetAdminFrom(proj.AdminFrom)
 

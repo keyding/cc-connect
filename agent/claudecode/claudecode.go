@@ -533,6 +533,14 @@ func validateSessionIDInProject(homeDir, workDir, sessionID string) bool {
 
 // StartSession creates a persistent interactive Claude Code session.
 func (a *Agent) StartSession(ctx context.Context, sessionID string) (core.AgentSession, error) {
+	return a.startSession(ctx, sessionID, nil)
+}
+
+// StartSessionWithEnv binds process-local routing without changing agent defaults.
+func (a *Agent) StartSessionWithEnv(ctx context.Context, sessionID string, env []string) (core.AgentSession, error) {
+	return a.startSession(ctx, sessionID, env)
+}
+func (a *Agent) startSession(ctx context.Context, sessionID string, env []string) (core.AgentSession, error) {
 	a.mu.Lock()
 	tools := make([]string, len(a.allowedTools))
 	copy(tools, a.allowedTools)
@@ -545,7 +553,7 @@ func (a *Agent) StartSession(ctx context.Context, sessionID string) (core.AgentS
 	mode := a.mode
 	pluginDirs := make([]string, len(a.pluginDirs))
 	copy(pluginDirs, a.pluginDirs)
-	extraEnv := a.runtimeEnvLocked()
+	extraEnv := append(a.runtimeEnvLocked(), env...)
 
 	activeIdx := a.activeIdx
 	var activeProviderName string

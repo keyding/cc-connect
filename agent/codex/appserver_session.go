@@ -253,6 +253,7 @@ func (s *appServerSession) connect() error {
 	}
 	cmd := exec.CommandContext(s.ctx, "codex", args...)
 	cmd.Dir = s.workDir
+	prepareCmdForKill(cmd)
 	env := append([]string(nil), s.extraEnv...)
 	if s.codexHome != "" {
 		env = append(env, "CODEX_HOME="+s.codexHome)
@@ -275,6 +276,11 @@ func (s *appServerSession) connect() error {
 	}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("codex app-server start: %w", err)
+	}
+	if err := core.CheckpointSharedExecutor(s.ctx, cmd.Process.Pid); err != nil {
+		_ = forceKillCmd(cmd)
+		_ = cmd.Wait()
+		return fmt.Errorf("checkpoint shared executor: %w", err)
 	}
 
 	s.procMu.Lock()
@@ -336,6 +342,9 @@ func (s *appServerSession) ensureThread(resumeID string) error {
 		}
 		s.applyThreadRuntimeState(resp.Cwd, resp.Model, resp.ReasoningEffort)
 		s.threadID.Store(resp.Thread.ID)
+		if err := core.CheckpointSharedHistory(s.ctx, resp.Thread.ID); err != nil {
+			return fmt.Errorf("checkpoint shared history: %w", err)
+		}
 		slog.Info("codex app-server thread resumed", "thread_id", resp.Thread.ID)
 		return nil
 	}
@@ -349,6 +358,9 @@ func (s *appServerSession) ensureThread(resumeID string) error {
 	}
 	s.applyThreadRuntimeState(resp.Cwd, resp.Model, resp.ReasoningEffort)
 	s.threadID.Store(resp.Thread.ID)
+	if err := core.CheckpointSharedHistory(s.ctx, resp.Thread.ID); err != nil {
+		return fmt.Errorf("checkpoint shared history: %w", err)
+	}
 	slog.Info("codex app-server thread started", "thread_id", resp.Thread.ID)
 	return nil
 }
@@ -541,16 +553,51 @@ func (s *appServerSession) stageImages(prompt string, images []core.ImageAttachm
 
 func (s *appServerSession) RespondPermission(requestID string, result core.PermissionResult) error {
 	s.approvalsMu.Lock()
+	defer s.approvalsMu.Unlock()
 	ch := s.pendingApprovals[requestID]
-	s.approvalsMu.Unlock()
-	if ch == nil {
+	if ch == nil || (s.ctx != nil && s.ctx.Err() != nil) {
 		return fmt.Errorf("codex app-server: no pending approval for request %s", requestID)
 	}
-	select {
-	case ch <- result:
-	default:
-	}
+	// Consume under the same lock as expiry: only one response can win.
+	delete(s.pendingApprovals, requestID)
+	ch <- result
 	return nil
+}
+
+// waitApproval preserves the existing deadline while making expiry terminal for
+// this interaction. Sending a denial on timeout could let the turn continue and
+// appear successful, so the engine must receive an error instead.
+func (s *appServerSession) waitApproval(requestID string, ch chan core.PermissionResult, expired <-chan time.Time) (core.PermissionResult, bool) {
+	select {
+	case result := <-ch:
+		return result, true
+	case <-s.ctx.Done():
+		s.approvalsMu.Lock()
+		delete(s.pendingApprovals, requestID)
+		s.approvalsMu.Unlock()
+		return core.PermissionResult{}, false
+	case <-expired:
+	}
+
+	s.approvalsMu.Lock()
+	pending := s.pendingApprovals[requestID] == ch
+	if pending {
+		delete(s.pendingApprovals, requestID)
+		// Close uses this lock too, so expiry cannot send on closed events.
+		// Unlike progress events, this terminal error must not be dropped.
+		if s.ctx.Err() == nil {
+			select {
+			case s.events <- core.Event{Type: core.EventError, Error: fmt.Errorf("codex app-server: interaction %s timed out", requestID)}:
+			case <-s.ctx.Done():
+			}
+		}
+	}
+	s.approvalsMu.Unlock()
+	if !pending {
+		// A response acquired the lock first and is already buffered.
+		return <-ch, true
+	}
+	return core.PermissionResult{}, false
 }
 
 func (s *appServerSession) handleServerRequest(probe map[string]json.RawMessage) {
@@ -619,17 +666,10 @@ func (s *appServerSession) handleApprovalRequest(rawID json.RawMessage, method s
 	go func() {
 		timer := time.NewTimer(5 * time.Minute)
 		defer timer.Stop()
-		var result core.PermissionResult
-		select {
-		case result = <-ch:
-		case <-s.ctx.Done():
-			result = core.PermissionResult{Behavior: "deny"}
-		case <-timer.C:
-			result = core.PermissionResult{Behavior: "deny"}
+		result, ok := s.waitApproval(requestID, ch, timer.C)
+		if !ok {
+			return
 		}
-		s.approvalsMu.Lock()
-		delete(s.pendingApprovals, requestID)
-		s.approvalsMu.Unlock()
 
 		decision := "decline"
 		if strings.EqualFold(result.Behavior, "allow") {
@@ -666,17 +706,10 @@ func (s *appServerSession) handlePermissionsApproval(rawID json.RawMessage, para
 	go func() {
 		timer := time.NewTimer(5 * time.Minute)
 		defer timer.Stop()
-		var result core.PermissionResult
-		select {
-		case result = <-ch:
-		case <-s.ctx.Done():
-			result = core.PermissionResult{Behavior: "deny"}
-		case <-timer.C:
-			result = core.PermissionResult{Behavior: "deny"}
+		result, ok := s.waitApproval(requestID, ch, timer.C)
+		if !ok {
+			return
 		}
-		s.approvalsMu.Lock()
-		delete(s.pendingApprovals, requestID)
-		s.approvalsMu.Unlock()
 
 		if strings.EqualFold(result.Behavior, "allow") {
 			perms := params["permissions"]
@@ -735,17 +768,10 @@ func (s *appServerSession) handleRequestUserInput(rawID json.RawMessage, paramsR
 	go func() {
 		timer := time.NewTimer(5 * time.Minute)
 		defer timer.Stop()
-		var result core.PermissionResult
-		select {
-		case result = <-ch:
-		case <-s.ctx.Done():
-			result = core.PermissionResult{Behavior: "deny"}
-		case <-timer.C:
-			result = core.PermissionResult{Behavior: "deny"}
+		result, ok := s.waitApproval(requestID, ch, timer.C)
+		if !ok {
+			return
 		}
-		s.approvalsMu.Lock()
-		delete(s.pendingApprovals, requestID)
-		s.approvalsMu.Unlock()
 
 		response := appServerRequestUserInputResponseFromResult(params.Questions, result)
 		_ = s.writeJSON(map[string]any{
@@ -947,7 +973,7 @@ func (s *appServerSession) Close() error {
 		s.stdin = nil
 	}
 	if s.cmd != nil && s.cmd.Process != nil {
-		_ = s.cmd.Process.Kill()
+		_ = forceKillCmd(s.cmd)
 	}
 	s.procMu.Unlock()
 
@@ -962,9 +988,11 @@ func (s *appServerSession) Close() error {
 	case <-time.After(2 * time.Second):
 	}
 
+	s.approvalsMu.Lock()
 	s.closeOnce.Do(func() {
 		close(s.events)
 	})
+	s.approvalsMu.Unlock()
 	return nil
 }
 
@@ -1709,7 +1737,7 @@ func (s *appServerSession) abortTransport() {
 		s.stdin = nil
 	}
 	if s.cmd != nil && s.cmd.Process != nil {
-		_ = s.cmd.Process.Kill()
+		_ = forceKillCmd(s.cmd)
 	}
 	s.procMu.Unlock()
 }

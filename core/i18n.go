@@ -699,6 +699,8 @@ const (
 )
 
 const (
+	MsgSharedProgress         MsgKey = "shared_progress"
+	MsgSharedReplyUnavailable MsgKey = "shared_reply_unavailable"
 	MsgSharedNotAccepted      MsgKey = "MsgSharedNotAccepted"
 	MsgSharedQueued           MsgKey = "MsgSharedQueued"
 	MsgSharedPaused           MsgKey = "MsgSharedPaused"
@@ -715,7 +717,337 @@ const (
 	MsgSharedCommands         MsgKey = "shared_sharedcommands"
 )
 
+const (
+	MsgQueueTitle           MsgKey = "QueueTitle"
+	MsgQueueEntry           MsgKey = "QueueEntry"
+	MsgQueueDenied          MsgKey = "QueueDenied"
+	MsgQueueStale           MsgKey = "QueueStale"
+	MsgQueueBlocked         MsgKey = "QueueBlocked"
+	MsgQueueResumed         MsgKey = "QueueResumed"
+	MsgQueueStopping        MsgKey = "QueueStopping"
+	MsgQueueCancelled       MsgKey = "QueueCancelled"
+	MsgQueueQueued          MsgKey = "QueueQueued"
+	MsgQueueRunning         MsgKey = "QueueRunning"
+	MsgQueueStoppingStatus  MsgKey = "QueueStoppingStatus"
+	MsgQueueStopped         MsgKey = "QueueStopped"
+	MsgQueueInterrupted     MsgKey = "QueueInterrupted"
+	MsgQueueCancelledStatus MsgKey = "QueueCancelledStatus"
+	MsgQueueCompleted       MsgKey = "QueueCompleted"
+)
+
+const (
+	MsgRecoveryChoose      MsgKey = "RecoveryChoose"
+	MsgRecoveryOwner       MsgKey = "RecoveryOwner"
+	MsgRecoveryWarning     MsgKey = "RecoveryWarning"
+	MsgRecoveryUnavailable MsgKey = "RecoveryUnavailable"
+	MsgRecoveryResolved    MsgKey = "RecoveryResolved"
+)
+
+const (
+	MsgRecoveryAcceptanceUnknown MsgKey = "RecoveryAcceptanceUnknown"
+	MsgRecoveryAdmissionStatus   MsgKey = "RecoveryAdmissionStatus"
+)
+
+const (
+	MsgInteractionPrompt      MsgKey = "shared_interaction_prompt"
+	MsgInteractionHint        MsgKey = "shared_interaction_hint"
+	MsgInteractionAnswerUsage MsgKey = "shared_interaction_answerusage"
+	MsgInteractionDenied      MsgKey = "shared_interaction_denied"
+	MsgInteractionStale       MsgKey = "shared_interaction_stale"
+	MsgInteractionReceived    MsgKey = "shared_interaction_received"
+	MsgInteractionAnswerSaved MsgKey = "shared_interaction_answersaved"
+	MsgInteractionWaiting     MsgKey = "shared_interaction_waiting"
+	MsgInteractionAllow       MsgKey = "shared_interaction_allow"
+	MsgInteractionDeny        MsgKey = "shared_interaction_deny"
+)
+
+const (
+	MsgSharedAccessDenied  MsgKey = "SharedAccessDenied"
+	MsgSharedDeleteBusy    MsgKey = "SharedDeleteBusy"
+	MsgSharedDeleteConfirm MsgKey = "SharedDeleteConfirm"
+	MsgSharedDeleted       MsgKey = "SharedDeleted"
+)
+
+const (
+	MsgSharedAccessSaveFailed      MsgKey = "SharedAccessSaveFailed"
+	MsgSharedAccessReconcileFailed MsgKey = "SharedAccessReconcileFailed"
+)
+
 var messages = map[MsgKey]map[Language]string{
+	MsgSharedAccessSaveFailed:      {LangEnglish: "Could not persist authorization settings.", LangChinese: "无法保存授权设置。", LangTraditionalChinese: "無法儲存授權設定。", LangJapanese: "権限設定を保存できませんでした。", LangSpanish: "No se pudo guardar la configuración de autorización."},
+	MsgSharedAccessReconcileFailed: {LangEnglish: "Authorization changed; request reconciliation requires attention before execution can resume.", LangChinese: "授权已更改；恢复执行前需要处理请求状态保存失败。", LangTraditionalChinese: "授權已變更；恢復執行前需要處理請求狀態儲存失敗。", LangJapanese: "権限を変更しました。実行再開前にリクエスト状態の保存失敗に対応してください。", LangSpanish: "Autorización modificada; la conciliación de solicitudes requiere atención antes de reanudar la ejecución."},
+
+	MsgSharedAccessDenied: {
+		LangEnglish:            "Access denied. Current authorization is required.",
+		LangChinese:            "访问被拒绝：需要当前授权。",
+		LangTraditionalChinese: "存取遭拒：需要目前授權。",
+		LangJapanese:           "アクセスできません。現在の権限が必要です。",
+		LangSpanish:            "Acceso denegado. Se requiere autorización vigente.",
+	},
+	MsgSharedDeleteBusy: {
+		LangEnglish:            "Session cannot be deleted while requests or interruption handling remain, or storage state is uncertain. Use /queue to inspect.",
+		LangChinese:            "会话仍有请求、待处理中断或存储状态不确定，不能删除。请用 /queue 查看。",
+		LangTraditionalChinese: "會話仍有請求、待處理中斷或儲存狀態不確定，不能刪除。請用 /queue 查看。",
+		LangJapanese:           "依頼、中断処理または保存状態の不確実性があるため削除できません。/queue で確認してください。",
+		LangSpanish:            "No se puede eliminar la sesión con solicitudes, interrupciones pendientes o almacenamiento incierto. Consulta /queue.",
+	},
+	MsgSharedDeleteConfirm: {
+		LangEnglish:            "Delete shared session %s (%s)? Existing code, worktrees and agent history will be preserved. Confirm this specific session: /delete %s confirm",
+		LangChinese:            "删除共享会话 %s（%s）？现有代码、worktree 和 Agent 历史将保留。确认删除此会话：/delete %s confirm",
+		LangTraditionalChinese: "刪除共享會話 %s（%s）？現有程式碼、worktree 和 Agent 歷史將保留。確認刪除此會話：/delete %s confirm",
+		LangJapanese:           "共有会話 %s（%s）を削除しますか？コード、worktree、エージェント履歴は保持します。この会話の削除を確認: /delete %s confirm",
+		LangSpanish:            "¿Eliminar la sesión compartida %s (%s)? Se conservarán el código, los worktrees y el historial del agente. Confirma esta sesión: /delete %s confirm",
+	},
+	MsgSharedDeleted: {
+		LangEnglish:            "Deleted shared session %s (%s). Old message references are invalid. Existing code and agent history were preserved.",
+		LangChinese:            "已删除共享会话 %s（%s）。旧消息引用已失效，现有代码和 Agent 历史保留。",
+		LangTraditionalChinese: "已刪除共享會話 %s（%s）。舊訊息引用已失效，現有程式碼和 Agent 歷史保留。",
+		LangJapanese:           "共有会話 %s（%s）を削除しました。古いメッセージ参照は無効です。コードとエージェント履歴は保持しました。",
+		LangSpanish:            "Sesión compartida %s (%s) eliminada. Las referencias antiguas ya no son válidas. Código e historial del agente conservados.",
+	},
+
+	MsgInteractionPrompt: {
+		LangEnglish:            "Session %s · requester %s · waiting for interaction: %s",
+		LangChinese:            "会话 %s · 发起人 %s · 等待交互：%s",
+		LangTraditionalChinese: "會話 %s · 發起人 %s · 等待互動：%s",
+		LangJapanese:           "会話 %s · 依頼者 %s · 操作待ち：%s",
+		LangSpanish:            "Sesión %s · solicitante %s · esperando interacción: %s",
+	},
+	MsgInteractionHint: {
+		LangEnglish:            "Use the current buttons or explicit /approve, /deny or /answer entry. Ordinary replies to this prompt do not approve or submit tasks.",
+		LangChinese:            "请使用当前按钮或明确的 /approve、/deny、/answer 入口。普通回复此提示不会批准或提交任务。",
+		LangTraditionalChinese: "請使用目前按鈕或明確的 /approve、/deny、/answer 入口。普通回覆此提示不會批准或提交任務。",
+		LangJapanese:           "現在のボタンまたは /approve、/deny、/answer を使ってください。この通知への通常返信は承認やタスクになりません。",
+		LangSpanish:            "Usa los botones actuales o /approve, /deny o /answer. Responder normalmente a este aviso no aprueba ni envía tareas.",
+	},
+	MsgInteractionAnswerUsage: {
+		LangEnglish:            "Answer explicitly: /answer %s %d <answer or option numbers>",
+		LangChinese:            "请明确回答：/answer %s %d <回答或选项编号>",
+		LangTraditionalChinese: "請明確回答：/answer %s %d <回答或選項編號>",
+		LangJapanese:           "回答：/answer %s %d <回答または選択肢番号>",
+		LangSpanish:            "Responde: /answer %s %d <respuesta o números de opciones>",
+	},
+	MsgInteractionDenied: {
+		LangEnglish:            "Only the currently authorized task requester may answer this interaction.",
+		LangChinese:            "仅当前仍有权限的任务发起人可以回答此交互。",
+		LangTraditionalChinese: "僅目前仍有權限的任務發起人可以回答此互動。",
+		LangJapanese:           "現在権限を持つタスク依頼者のみ回答できます。",
+		LangSpanish:            "Solo el solicitante de la tarea con autorización vigente puede responder.",
+	},
+	MsgInteractionStale: {
+		LangEnglish:            "This interaction is invalid, already answered or expired. Use the current question entry.",
+		LangChinese:            "该交互已失效、已回答或已过期。请使用当前问题入口。",
+		LangTraditionalChinese: "該互動已失效、已回答或已過期。請使用目前問題入口。",
+		LangJapanese:           "この操作は無効、回答済み、または期限切れです。現在の質問を使ってください。",
+		LangSpanish:            "Esta interacción es inválida, ya fue respondida o caducó. Usa la pregunta actual.",
+	},
+	MsgInteractionReceived: {
+		LangEnglish:            "Response received for this task.",
+		LangChinese:            "已收到此任务的交互响应。",
+		LangTraditionalChinese: "已收到此任務的互動回應。",
+		LangJapanese:           "このタスクへの回答を受け付けました。",
+		LangSpanish:            "Respuesta recibida para esta tarea.",
+	},
+	MsgInteractionAnswerSaved: {
+		LangEnglish:            "Answer recorded. Please answer the remaining questions.",
+		LangChinese:            "已记录回答，请继续回答其余问题。",
+		LangTraditionalChinese: "已記錄回答，請繼續回答其餘問題。",
+		LangJapanese:           "回答を記録しました。残りの質問に回答してください。",
+		LangSpanish:            "Respuesta registrada. Responde las preguntas restantes.",
+	},
+	MsgInteractionWaiting: {
+		LangEnglish:            "Waiting for requester interaction",
+		LangChinese:            "等待发起人交互",
+		LangTraditionalChinese: "等待發起人互動",
+		LangJapanese:           "依頼者の操作待ち",
+		LangSpanish:            "Esperando al solicitante",
+	},
+	MsgInteractionAllow: {
+		LangEnglish:            "Allow once",
+		LangChinese:            "允许本次",
+		LangTraditionalChinese: "允許本次",
+		LangJapanese:           "今回のみ許可",
+		LangSpanish:            "Permitir una vez",
+	},
+	MsgInteractionDeny: {
+		LangEnglish:            "Deny",
+		LangChinese:            "拒绝",
+		LangTraditionalChinese: "拒絕",
+		LangJapanese:           "拒否",
+		LangSpanish:            "Denegar",
+	},
+
+	MsgSharedProgress: {
+		LangEnglish:            "Working: %s",
+		LangChinese:            "正在执行：%s",
+		LangTraditionalChinese: "正在執行：%s",
+		LangJapanese:           "実行中：%s",
+		LangSpanish:            "En curso: %s",
+	},
+	MsgRecoveryAcceptanceUnknown: {
+		LangEnglish:            "Acceptance is unconfirmed for request %s in %s. Execution is fenced in this process. After storage repair and restart, the request may be retained or absent; check /queue %s before submitting anything again.",
+		LangChinese:            "会话请求 %s（%s）的接收结果无法确认。当前进程已阻止继续执行。修复存储并重启后，该请求可能保留或不存在；再次提交前请检查 /queue %s。",
+		LangTraditionalChinese: "會話請求 %s（%s）的接收結果無法確認。目前程序已阻止繼續執行。修復儲存並重啟後，該請求可能保留或不存在；再次提交前請檢查 /queue %s。",
+		LangJapanese:           "依頼 %s（%s）の受付結果を確認できません。このプロセスでは実行を停止しています。保存先の修復と再起動後に依頼が残る場合と残らない場合があります。再送前に /queue %s を確認してください。",
+		LangSpanish:            "La aceptación de %s en %s no está confirmada. Este proceso bloquea la ejecución. Tras reparar el almacenamiento y reiniciar, la solicitud puede conservarse o no; consulta /queue %s antes de volver a enviarla.",
+	},
+	MsgRecoveryAdmissionStatus: {
+		LangEnglish:            "acceptance unconfirmed; storage repair and restart required",
+		LangChinese:            "接收未确认；需要修复存储并重启",
+		LangTraditionalChinese: "接收未確認；需要修復儲存並重啟",
+		LangJapanese:           "受付未確認・保存先の修復と再起動が必要",
+		LangSpanish:            "aceptación no confirmada; requiere reparar almacenamiento y reiniciar",
+	},
+
+	MsgRecoveryChoose: {
+		LangEnglish:            "Use /queue and choose the interrupted request.",
+		LangChinese:            "请用 /queue 查看并选择中断请求。",
+		LangTraditionalChinese: "請用 /queue 查看並選擇中斷請求。",
+		LangJapanese:           "/queue で中断した依頼を選択してください。",
+		LangSpanish:            "Usa /queue y elige la solicitud interrumpida.",
+	},
+	MsgRecoveryOwner: {
+		LangEnglish:            "Only the requester may choose to continue this interrupted task.",
+		LangChinese:            "仅发起人可选择继续此中断任务。",
+		LangTraditionalChinese: "僅發起人可選擇繼續此中斷任務。",
+		LangJapanese:           "中断タスクの続行は依頼者のみ選択できます。",
+		LangSpanish:            "Solo el solicitante puede elegir continuar esta tarea interrumpida.",
+	},
+	MsgRecoveryWarning: {
+		LangEnglish:            "%s / requester %s / %s may already have executed tools and changed files. Continuing cannot undo or safely repeat those actions. To check whether progress continuation is supported: /continue %s confirm",
+		LangChinese:            "%s / 发起人 %s / %s 可能已经执行工具并修改文件。继续不能撤销或安全重复这些操作。确认查看是否支持基于进度继续：/continue %s confirm",
+		LangTraditionalChinese: "%s / 發起人 %s / %s 可能已經執行工具並修改檔案。繼續不能撤銷或安全重複這些操作。確認查看是否支援基於進度繼續：/continue %s confirm",
+		LangJapanese:           "%s / 依頼者 %s / %s は既にツールを実行し、ファイルを変更した可能性があります。続行で取り消したり安全に繰り返すことはできません。対応状況を確認: /continue %s confirm",
+		LangSpanish:            "%s / solicitante %s / %s puede haber ejecutado herramientas y modificado archivos. Continuar no deshace ni permite repetir esas acciones con seguridad. Comprueba la compatibilidad: /continue %s confirm",
+	},
+	MsgRecoveryUnavailable: {
+		LangEnglish:            "Reliable interrupted-progress continuation is unavailable for this executor. Inspect the existing results, resolve this task with /resolve %s, then explicitly resume the queue and submit a new instruction describing what remains. The original task was not replayed.",
+		LangChinese:            "此执行者不支持可靠接续中断进度。请检查已有成果，用 /resolve %s 结束此任务，再明确恢复队列并提交描述剩余工作的新指令。原任务未重放。",
+		LangTraditionalChinese: "此執行者不支援可靠接續中斷進度。請檢查已有成果，用 /resolve %s 結束此任務，再明確恢復佇列並提交描述剩餘工作的新指令。原任務未重放。",
+		LangJapanese:           "この実行環境では中断地点からの安全な続行は未対応です。成果を確認し /resolve %s で終了後、キューを明示的に再開し残りの作業を新しく依頼してください。元の依頼は再実行していません。",
+		LangSpanish:            "Este ejecutor no admite continuación fiable del progreso interrumpido. Revisa los resultados, cierra con /resolve %s, reanuda la cola explícitamente y envía instrucciones nuevas para el trabajo restante. No se repitió la tarea original.",
+	},
+	MsgRecoveryResolved: {
+		LangEnglish:            "Ended %s / requester %s / %s and preserved existing work. Queue remains paused. Resume unstarted requests explicitly: /resume %s",
+		LangChinese:            "已结束 %s / 发起人 %s / %s，并保留已有成果。队列仍暂停。明确恢复尚未开始的请求：/resume %s",
+		LangTraditionalChinese: "已結束 %s / 發起人 %s / %s，並保留已有成果。佇列仍暫停。明確恢復尚未開始的請求：/resume %s",
+		LangJapanese:           "%s / 依頼者 %s / %s を終了し成果を保持しました。キューは停止中です。未開始の依頼を明示的に再開: /resume %s",
+		LangSpanish:            "Finalizada %s / solicitante %s / %s; trabajo conservado. La cola sigue pausada. Reanuda solo solicitudes sin iniciar: /resume %s",
+	},
+
+	MsgSharedReplyUnavailable: {
+		LangEnglish:            "This reply cannot be linked to an accessible session. Select a session and send again.",
+		LangChinese:            "无法确认此回复所属的可访问会话。请选择会话后重新发送。",
+		LangTraditionalChinese: "無法確認此回覆所屬的可存取會話。請選擇會話後重新傳送。",
+		LangJapanese:           "この返信の会話を確認できないか、アクセスできません。会話を選択して再送してください。",
+		LangSpanish:            "No se puede vincular esta respuesta a una sesión accesible. Selecciona una sesión y vuelve a enviar.",
+	},
+	MsgQueueTitle: {
+		LangEnglish:            "Queue for %s (%s):",
+		LangChinese:            "会话 %s（%s）的队列：",
+		LangTraditionalChinese: "會話 %s（%s）的佇列：",
+		LangJapanese:           "会話 %s（%s）のキュー：",
+		LangSpanish:            "Cola de %s (%s):",
+	},
+	MsgQueueEntry: {
+		LangEnglish:            "%s — requester %s — %s",
+		LangChinese:            "%s — 发起人 %s — %s",
+		LangTraditionalChinese: "%s — 發起人 %s — %s",
+		LangJapanese:           "%s — 依頼者 %s — %s",
+		LangSpanish:            "%s — solicitante %s — %s",
+	},
+	MsgQueueDenied: {
+		LangEnglish:            "Only the requester may cancel this queued task, and current authorization is required.",
+		LangChinese:            "仅发起人可取消自己的排队任务，且需要当前授权。",
+		LangTraditionalChinese: "僅發起人可取消自己的排隊任務，且需要目前授權。",
+		LangJapanese:           "取消は現在権限のある依頼者のみ可能です。",
+		LangSpanish:            "Solo el solicitante autorizado puede cancelar su tarea pendiente.",
+	},
+	MsgQueueStale: {
+		LangEnglish:            "Control expired or target unavailable. Use /queue to refresh.",
+		LangChinese:            "控制已失效或目标不可用，请用 /queue 刷新。",
+		LangTraditionalChinese: "控制已失效或目標不可用，請用 /queue 更新。",
+		LangJapanese:           "操作が失効したか対象がありません。/queue で更新してください。",
+		LangSpanish:            "Control caducado o destino no disponible. Actualiza con /queue.",
+	},
+	MsgQueueBlocked: {
+		LangEnglish:            "Queue remains paused: executor exit or interruption handling is still pending.",
+		LangChinese:            "队列仍暂停：执行者尚未确认退出或中断仍待处理。",
+		LangTraditionalChinese: "佇列仍暫停：執行者尚未確認退出或中斷仍待處理。",
+		LangJapanese:           "キューは停止中です。実行終了の確認または中断処理が必要です。",
+		LangSpanish:            "La cola sigue pausada: falta confirmar la salida o resolver la interrupción.",
+	},
+	MsgQueueResumed: {
+		LangEnglish:            "Queue resumed for %s; only unstarted requests will run.",
+		LangChinese:            "会话 %s 的队列已恢复，仅执行尚未开始的请求。",
+		LangTraditionalChinese: "會話 %s 的佇列已恢復，僅執行尚未開始的請求。",
+		LangJapanese:           "%s のキューを再開しました。未開始の依頼のみ実行します。",
+		LangSpanish:            "Cola de %s reanudada; solo se ejecutarán solicitudes sin iniciar.",
+	},
+	MsgQueueStopping: {
+		LangEnglish:            "Stop requested for %s / requester %s / %s. Queue retained and paused until executor exit is confirmed.",
+		LangChinese:            "已请求停止 %s / 发起人 %s / %s。队列保留并暂停，等待确认执行者退出。",
+		LangTraditionalChinese: "已請求停止 %s / 發起人 %s / %s。佇列保留並暫停，等待確認執行者退出。",
+		LangJapanese:           "停止要求: %s / 依頼者 %s / %s。キューを保持し終了確認まで停止します。",
+		LangSpanish:            "Parada solicitada: %s / solicitante %s / %s. Cola conservada y pausada hasta confirmar salida.",
+	},
+	MsgQueueCancelled: {
+		LangEnglish:            "Cancelled %s / requester %s / %s.",
+		LangChinese:            "已取消 %s / 发起人 %s / %s。",
+		LangTraditionalChinese: "已取消 %s / 發起人 %s / %s。",
+		LangJapanese:           "取消済み: %s / 依頼者 %s / %s。",
+		LangSpanish:            "Cancelada: %s / solicitante %s / %s.",
+	},
+	MsgQueueQueued: {
+		LangEnglish:            "queued",
+		LangChinese:            "排队中",
+		LangTraditionalChinese: "排隊中",
+		LangJapanese:           "待機中",
+		LangSpanish:            "en cola",
+	},
+	MsgQueueRunning: {
+		LangEnglish:            "running",
+		LangChinese:            "执行中",
+		LangTraditionalChinese: "執行中",
+		LangJapanese:           "実行中",
+		LangSpanish:            "en ejecución",
+	},
+	MsgQueueStoppingStatus: {
+		LangEnglish:            "stop requested; awaiting exit",
+		LangChinese:            "已请求停止，等待退出",
+		LangTraditionalChinese: "已請求停止，等待退出",
+		LangJapanese:           "停止要求済み・終了待ち",
+		LangSpanish:            "parada solicitada; esperando salida",
+	},
+	MsgQueueStopped: {
+		LangEnglish:            "stopped; queue paused",
+		LangChinese:            "已停止，队列暂停",
+		LangTraditionalChinese: "已停止，佇列暫停",
+		LangJapanese:           "停止済み・キュー停止中",
+		LangSpanish:            "detenida; cola pausada",
+	},
+	MsgQueueInterrupted: {
+		LangEnglish:            "interrupted; resolution required",
+		LangChinese:            "中断，待处理",
+		LangTraditionalChinese: "中斷，待處理",
+		LangJapanese:           "中断・対応が必要",
+		LangSpanish:            "interrumpida; requiere resolución",
+	},
+	MsgQueueCancelledStatus: {
+		LangEnglish:            "cancelled",
+		LangChinese:            "已取消",
+		LangTraditionalChinese: "已取消",
+		LangJapanese:           "取消済み",
+		LangSpanish:            "cancelada",
+	},
+	MsgQueueCompleted: {
+		LangEnglish:            "completed",
+		LangChinese:            "已完成",
+		LangTraditionalChinese: "已完成",
+		LangJapanese:           "完了",
+		LangSpanish:            "completada",
+	},
+
 	MsgSharedNotAccepted: {
 		LangEnglish:            "Task not accepted: request, attachments or reply destination could not be saved.",
 		LangChinese:            "任务未接收：请求、附件或回复位置未能保存。",
@@ -731,11 +1063,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "Guardada para %s; hay %d solicitudes delante.",
 	},
 	MsgSharedPaused: {
-		LangEnglish:            "Queue paused: execution failed, was interrupted or could not be confirmed. Saved requests are retained; manual recovery is not available yet.",
-		LangChinese:            "队列已暂停：执行失败、中断或结果无法确认。已保存请求保留；人工恢复入口尚未提供。",
-		LangTraditionalChinese: "佇列已暫停：執行失敗、中斷或結果無法確認。已儲存請求保留；人工恢復入口尚未提供。",
-		LangJapanese:           "実行失敗、中断または結果不明のためキューを停止しました。保存済みリクエストは保持されます。手動復旧はまだ未対応です。",
-		LangSpanish:            "Cola pausada: ejecución fallida, interrumpida o incierta. Se conservan las solicitudes; la recuperación manual aún no está disponible.",
+		LangEnglish:            "Queue paused: execution failed, was interrupted or could not be confirmed. Saved requests are retained. Use /queue to inspect and /resume after confirmed stop.",
+		LangChinese:            "队列已暂停：执行失败、中断或结果无法确认。已保存请求保留；用 /queue 查看，确认停止后用 /resume 恢复。",
+		LangTraditionalChinese: "佇列已暫停：執行失敗、中斷或結果無法確認。已儲存請求保留；用 /queue 查看，確認停止後用 /resume 恢復。",
+		LangJapanese:           "実行失敗、中断または結果不明のためキューを停止しました。保存済みリクエストは保持されます。/queue で確認し、停止確認後に /resume で再開できます。",
+		LangSpanish:            "Cola pausada: ejecución fallida, interrumpida o incierta. Se conservan las solicitudes; usa /queue para consultar y /resume tras confirmar la parada.",
 	},
 	MsgSharedWaiting: {
 		LangEnglish:            "Agent is waiting for interaction. The queue and working directory remain locked; shared interaction controls are not available yet.",
@@ -808,11 +1140,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "La ejecución compartida no está disponible en esta vista previa. La tarea no se aceptó ni guardó.",
 	},
 	MsgSharedCommands: {
-		LangEnglish:            "Shared mode supports /new, /list, /switch, /name and /current.",
-		LangChinese:            "共享模式支持 /new、/list、/switch、/name 和 /current。",
-		LangTraditionalChinese: "共享模式支援 /new、/list、/switch、/name 和 /current。",
-		LangJapanese:           "共有モードは /new、/list、/switch、/name、/current に対応しています。",
-		LangSpanish:            "El modo compartido admite /new, /list, /switch, /name y /current.",
+		LangEnglish:            "Shared mode supports /new, /list, /switch, /name and /current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete.",
+		LangChinese:            "共享模式支持 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete。",
+		LangTraditionalChinese: "共享模式支援 /new、/list、/switch、/name 和 /current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete。",
+		LangJapanese:           "共有モードは /new、/list、/switch、/name、/current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete に対応しています。",
+		LangSpanish:            "El modo compartido admite /new, /list, /switch, /name y /current, /queue, /cancel, /stop, /resume, /resolve, /continue, /delete.",
 	},
 
 	MsgStarting: {

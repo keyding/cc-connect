@@ -46,7 +46,7 @@ type queueTestAgent struct {
 
 func (a *queueTestAgent) GetWorkDir() string { return a.dir }
 func (a *queueTestAgent) StartSession(ctx context.Context, id string) (AgentSession, error) {
-	s := &queueTestSession{cujAgentSession: newCUJAgentSession(), resume: id, sent: make(chan string, 1), sendRelease: a.sendRelease, sendError: a.sendError, exitRelease: a.exitRelease}
+	s := &queueTestSession{cujAgentSession: newCUJAgentSession(), resume: id, sent: make(chan string, 1), responses: make(chan PermissionResult, 10), sendRelease: a.sendRelease, sendError: a.sendError, exitRelease: a.exitRelease}
 	a.calls <- s
 	return s, nil
 }
@@ -54,6 +54,7 @@ func (a *queueTestAgent) StartSession(ctx context.Context, id string) (AgentSess
 type queueTestSession struct {
 	*cujAgentSession
 	resume      string
+	responses   chan PermissionResult
 	sent        chan string
 	files       []FileAttachment
 	sendRelease <-chan struct{}
@@ -68,6 +69,12 @@ func (s *queueTestSession) Send(prompt, id string, images []ImageAttachment, fil
 		<-s.sendRelease
 	}
 	return s.sendError
+}
+func (s *queueTestSession) RespondPermission(_ string, result PermissionResult) error {
+	if s.responses != nil {
+		s.responses <- result
+	}
+	return nil
 }
 func (s *queueTestSession) CurrentSessionID() string { return "history-one" }
 func nextQueueSession(t *testing.T, a *queueTestAgent) *queueTestSession {
@@ -181,6 +188,8 @@ func TestSharedQueue_SameActualDirectoryAndIndependentDirectory(t *testing.T) {
 	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "waiting for interaction") })
 	noQueueSession(t, oa)
 	free.events <- Event{Type: EventResult, Content: "free done", Done: true}
+	queueMessage(e, p, "a", "3", "/approve "+waitInteraction(t, p, 1))
+	<-first.responses
 	first.events <- Event{Type: EventResult, Content: "first done", Done: true}
 	second := nextQueueSession(t, oa)
 	<-second.sent
@@ -373,9 +382,15 @@ func TestSharedQueue_ProcessCrashDoesNotReplay(t *testing.T) {
 	if path := os.Getenv("CC_QUEUE_CRASH_FIXTURE"); path != "" {
 		e, p, a := newQueueEngine(t, filepath.Dir(path), path)
 		queueMessage(e, p, "a", "1", "/new Alpha")
-		if os.Getenv("CC_QUEUE_CRASH_START_FAILURE") == "true" {
+		if mode := os.Getenv("CC_QUEUE_CRASH_START_FAILURE"); mode != "running" {
 			var restore func()
-			e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: "a", UserID: "a", MessageID: "2", Content: "not started", ReplyCtx: "a", OnAccepted: func() { restore = breakQueueStorage(t, filepath.Dir(path)) }})
+			e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "group", SessionKey: "a", UserID: "a", MessageID: "2", Content: "not started", ReplyCtx: "a", OnAccepted: func() {
+				if mode == "pending-intent" {
+					restore = breakQueueSnapshot(t, path)
+				} else {
+					restore = breakQueueStorage(t, filepath.Dir(path))
+				}
+			}})
 			waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "Queue paused") })
 			restore()
 			noQueueSession(t, a)
@@ -388,17 +403,17 @@ func TestSharedQueue_ProcessCrashDoesNotReplay(t *testing.T) {
 		fmt.Println("QUEUE_CRASH_READY")
 		select {}
 	}
-	for _, startFailure := range []bool{false, true} {
-		t.Run(fmt.Sprint(startFailure), func(t *testing.T) { crashSharedQueue(t, startFailure) })
+	for _, mode := range []string{"running", "no-intent", "pending-intent"} {
+		t.Run(mode, func(t *testing.T) { crashSharedQueue(t, mode) })
 	}
 }
 
-func crashSharedQueue(t *testing.T, startFailure bool) {
+func crashSharedQueue(t *testing.T, mode string) {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state")
 	cmd := exec.Command(os.Args[0], "-test.run=^TestSharedQueue_ProcessCrashDoesNotReplay$")
-	cmd.Env = append(os.Environ(), "CC_QUEUE_CRASH_FIXTURE="+path, "CC_QUEUE_CRASH_START_FAILURE="+fmt.Sprint(startFailure))
+	cmd.Env = append(os.Environ(), "CC_QUEUE_CRASH_FIXTURE="+path, "CC_QUEUE_CRASH_START_FAILURE="+mode)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -435,6 +450,19 @@ func crashSharedQueue(t *testing.T, startFailure bool) {
 		t.Fatal(err)
 	}
 	queueMessage(restored, p, "a", "4", "after actual process crash")
+	if mode == "no-intent" {
+		first := nextQueueSession(t, a)
+		if got := <-first.sent; !strings.Contains(got, "not started") {
+			t.Fatal(got)
+		}
+		first.events <- Event{Type: EventResult, Content: "first completed once", Done: true}
+		next := nextQueueSession(t, a)
+		<-next.sent
+		next.events <- Event{Type: EventResult, Content: "next completed once", Done: true}
+		waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "next completed once") })
+		noQueueSession(t, a)
+		return
+	}
 	if got := strings.Join(p.getSent(), "\n"); !strings.Contains(got, "Queue paused") || !strings.Contains(got, "Saved for Alpha") {
 		t.Fatal(got)
 	}
@@ -512,4 +540,26 @@ func (s *queueTestSession) answerInResumedConversation(answer string) {
 		answer = "fresh conversation without prior context"
 	}
 	s.events <- Event{Type: EventResult, Content: answer, Done: true}
+}
+
+// Fail replacement of the primary snapshot after the journal can be written.
+// Assertions remain at ReceiveMessage, output and executor boundaries.
+func breakQueueSnapshot(t *testing.T, path string) func() {
+	t.Helper()
+	snapshot := path + ".requests.json"
+	if err := os.Rename(snapshot, snapshot+"-saved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(snapshot, 0700); err != nil {
+		t.Fatal(err)
+	}
+	return func() {
+		t.Helper()
+		if err := os.Remove(snapshot); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(snapshot+"-saved", snapshot); err != nil {
+			t.Fatal(err)
+		}
+	}
 }

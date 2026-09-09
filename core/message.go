@@ -408,6 +408,9 @@ type Message struct {
 	// SharedScope is an explicit platform group identity for the opt-in shared directory.
 	// SessionKey remains the personal or common default-selection entry.
 	SharedScope string
+	// BotReply is present only for a verified reference to this bot; empty IDs fail closed.
+	BotReply    *MessageReference
+	Interaction *InteractionResponse
 	// AttachmentError reports a platform download failure before durable admission.
 	AttachmentError error
 

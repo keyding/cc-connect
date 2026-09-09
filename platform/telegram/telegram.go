@@ -437,8 +437,9 @@ func (p *Platform) handleMessage(ctx context.Context, msg *models.Message) {
 	channelKey := buildChannelKey(msg.Chat.ID, threadID)
 
 	userID := strconv.FormatInt(msg.From.ID, 10)
-	if !core.AllowList(p.allowFrom, userID) {
+	if !p.allowUser(userID) {
 		slog.Debug("telegram: message from unauthorized user", "user", userID)
+		p.dispatchSharedDenial(msg.Chat, threadID, msg.From.ID, replyContext{chatID: msg.Chat.ID, threadID: threadID, messageID: msg.ID})
 		return
 	}
 
@@ -601,6 +602,7 @@ func (p *Platform) sharedScope(chat models.Chat) string {
 
 func (p *Platform) dispatchMessage(msg *core.Message, tgMsg *models.Message) {
 	msg.SharedScope = p.sharedScope(tgMsg.Chat)
+	msg.BotReply = p.replyReference(tgMsg)
 	// Enrich with platform-specific context (reply quotes, location text, etc.)
 	var extras []string
 	if replyText := enrichReplyContent(tgMsg); replyText != "" {
@@ -800,6 +802,13 @@ func retryLogMessage(cause retryCause) string {
 }
 
 func (p *Platform) handleCallbackQuery(ctx context.Context, cb *models.CallbackQuery) {
+	if inaccessible := cb.Message.InaccessibleMessage; inaccessible != nil && p.sharedScope(inaccessible.Chat) != "" && !p.allowUser(strconv.FormatInt(cb.From.ID, 10)) {
+		p.dispatchSharedDenial(inaccessible.Chat, 0, cb.From.ID, interactionCallbackReply{ID: cb.ID})
+		return
+	}
+	if p.handleInaccessibleSharedCallback(cb) {
+		return
+	}
 	msg := cb.Message.Message
 	if msg == nil {
 		return
@@ -816,8 +825,14 @@ func (p *Platform) handleCallbackQuery(ctx context.Context, cb *models.CallbackQ
 	msgID := msg.ID
 	userID := strconv.FormatInt(cb.From.ID, 10)
 
-	if !core.AllowList(p.allowFrom, userID) {
+	if !p.allowUser(userID) {
 		slog.Debug("telegram: callback from unauthorized user", "user", userID)
+		if p.sharedScope(msg.Chat) != "" {
+			if _, err := bot.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{CallbackQueryID: cb.ID}); err != nil {
+				slog.Warn("telegram: clear denied callback", "error", err)
+			}
+			p.dispatchSharedDenial(msg.Chat, msg.MessageThreadID, cb.From.ID, replyContext{chatID: chatID, threadID: msg.MessageThreadID, messageID: msgID})
+		}
 		return
 	}
 
@@ -848,6 +863,11 @@ func (p *Platform) handleCallbackQuery(ctx context.Context, cb *models.CallbackQ
 		chatName = msg.Chat.Title
 	}
 	rctx := replyContext{chatID: chatID, threadID: threadID, messageID: msgID}
+
+	if strings.HasPrefix(data, "shared:") || (p.sharedScope(msg.Chat) != "" && (strings.HasPrefix(data, "perm:") || strings.HasPrefix(data, "askq:"))) {
+		p.handler(p, &core.Message{SharedScope: p.sharedScope(msg.Chat), SessionKey: sessionKey, Platform: "telegram", UserID: userID, UserName: userName, MessageID: cb.ID, ChannelKey: channelKey, ReplyCtx: rctx, Interaction: parseSharedInteraction(data)})
+		return
+	}
 
 	emptyMarkup := &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}}
 
@@ -913,16 +933,17 @@ func (p *Platform) handleCallbackQuery(ctx context.Context, cb *models.CallbackQ
 		}
 
 		p.handler(p, &core.Message{
-			SharedScope: p.sharedScope(msg.Chat),
-			SessionKey:  sessionKey,
-			Platform:    "telegram",
-			UserID:      userID,
-			UserName:    userName,
-			ChatName:    chatName,
-			Content:     data,
-			MessageID:   strconv.Itoa(msgID),
-			ChannelKey:  channelKey,
-			ReplyCtx:    rctx,
+			SharedScope:          p.sharedScope(msg.Chat),
+			IsPermissionResponse: true,
+			SessionKey:           sessionKey,
+			Platform:             "telegram",
+			UserID:               userID,
+			UserName:             userName,
+			ChatName:             chatName,
+			Content:              data,
+			MessageID:            strconv.Itoa(msgID),
+			ChannelKey:           channelKey,
+			ReplyCtx:             rctx,
 		})
 		return
 	}
@@ -1024,6 +1045,12 @@ func (p *Platform) isDirectedAtBot(msg *models.Message) bool {
 		}
 	}
 
+	// External references may identify this bot across Topics. Missing identity
+	// is still dispatched so core can explicitly reject it.
+	if msg.ExternalReply != nil && p.replyReference(msg) != nil {
+		return true
+	}
+
 	// Check if replying to a message from this bot
 	if msg.ReplyToMessage != nil && msg.ReplyToMessage.From != nil {
 		slog.Debug("telegram: checking reply", "bot_id", self.ID, "reply_from_id", msg.ReplyToMessage.From.ID)
@@ -1058,6 +1085,9 @@ func isCommand(msg *models.Message) bool {
 }
 
 func (p *Platform) Reply(ctx context.Context, rctx any, content string) error {
+	if callback, ok := rctx.(interactionCallbackReply); ok {
+		return p.replyInteractionCallback(ctx, callback, content)
+	}
 	rc, ok := rctx.(replyContext)
 	if !ok {
 		return fmt.Errorf("telegram: invalid reply context type %T", rctx)
@@ -1878,4 +1908,37 @@ func (p *Platform) rejectSharedAttachment(msg *models.Message, target replyConte
 		return
 	}
 	p.dispatchMessage(&core.Message{Platform: "telegram", MessageID: strconv.Itoa(msg.ID), UserID: strconv.FormatInt(msg.From.ID, 10), ReplyCtx: target, AttachmentError: err}, msg)
+}
+
+// AuthorizeSharedControl rechecks the current allow list for bound controls.
+func (p *Platform) AuthorizeSharedControl(scope, userID string) bool {
+	return scope != "" && p.allowUser(userID)
+}
+
+// SetAllowFrom publishes a new authorization snapshot for both incoming events
+// and Engine control checks. Configuration changes do not require reconnecting.
+func (p *Platform) SetAllowFrom(allowFrom string) {
+	p.mu.Lock()
+	p.allowFrom = allowFrom
+	p.mu.Unlock()
+}
+func (p *Platform) allowUser(userID string) bool {
+	p.mu.RLock()
+	allowFrom := p.allowFrom
+	p.mu.RUnlock()
+	return core.AllowList(allowFrom, userID)
+}
+
+// A denied shared event must reach the Engine so it can reconcile this user's
+// pending work and render its localized generic denial. Deliberately omit the
+// message ID, content and attachments: even a concurrent re-grant cannot turn
+// this authorization notification into an executable task.
+func (p *Platform) dispatchSharedDenial(chat models.Chat, threadID int, userID int64, target any) {
+	scope := p.sharedScope(chat)
+	if scope == "" {
+		return
+	}
+	if handler := p.messageHandler(); handler != nil {
+		handler(p, &core.Message{Platform: "telegram", SharedScope: scope, UserID: strconv.FormatInt(userID, 10), SessionKey: p.buildSessionKey(chat.ID, threadID, userID), ReplyCtx: target})
+	}
 }
