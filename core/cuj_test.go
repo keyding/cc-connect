@@ -2493,7 +2493,7 @@ func TestCUJ_B14_SharedDirectoryAcrossTopicsAndRestart(t *testing.T) {
 	if got := send("alice", "one", "/new Alpha"); !strings.Contains(got, "Alpha") {
 		t.Fatal(got)
 	}
-	if got := send("bob", "two", "/list"); !strings.Contains(got, "1. 💬 **「Alpha」**") {
+	if got := send("bob", "two", "/list"); !strings.Contains(got, "1. **「Alpha」**") {
 		t.Fatal(got)
 	}
 	if got := send("bob", "two", "/switch 1"); !strings.Contains(got, "Alpha") {
@@ -2619,7 +2619,7 @@ func TestCUJ_B14_SharedNamesAreAtomic(t *testing.T) {
 	send("bob", "/name alpha")
 	send("bob", "/current")
 	got := strings.Join(p.getSent()[before:], "\n")
-	if !strings.Contains(got, "already exists") || !strings.Contains(got, "Current: 💬 **「Beta」**") {
+	if !strings.Contains(got, "already exists") || !strings.Contains(got, "Current: **「Beta」**") {
 		t.Fatal(got)
 	}
 	send("bob", "/new")
@@ -2627,7 +2627,7 @@ func TestCUJ_B14_SharedNamesAreAtomic(t *testing.T) {
 	before = len(p.getSent())
 	send("alice", "/list")
 	got = strings.Join(p.getSent()[before:], "\n")
-	for _, want := range []string{"1. 💬 **「ALpha」**", "2. 💬 **「Beta」**", "3. 💬 **「session-3」**", "4. 💬 **「session-4」**"} {
+	for _, want := range []string{"1. **「ALpha」**", "2. **「Beta」**", "3. **「session-3」**", "4. **「session-4」**"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %s: %s", want, got)
 		}
@@ -2637,7 +2637,7 @@ func TestCUJ_B14_SharedNamesAreAtomic(t *testing.T) {
 	send("bob", "/name Gamma")
 	send("alice", "/switch 2")
 	got = strings.Join(p.getSent()[before:], "\n")
-	if !strings.Contains(got, "Current: 💬 **「ALpha」**") || !strings.Contains(got, "Current: 💬 **「Beta」**") {
+	if !strings.Contains(got, "Current: **「ALpha」**") || !strings.Contains(got, "Current: **「Beta」**") {
 		t.Fatal(got)
 	}
 }
@@ -2675,7 +2675,7 @@ func TestCUJ_B14_SharedDirectoryWriteFailureDoesNotChangeSelection(t *testing.T)
 	if got := send("/list"); strings.Contains(got, "Beta") {
 		t.Fatal(got)
 	}
-	if got := send("/new Beta"); !strings.Contains(got, "Current: 💬 **「Beta」**") {
+	if got := send("/new Beta"); !strings.Contains(got, "Current: **「Beta」**") {
 		t.Fatal(got)
 	}
 }
@@ -3852,7 +3852,7 @@ func TestCUJ_B14_SharedHistoryAndSelectionAcrossRestart(t *testing.T) {
 
 	queueMessage(e, p, "bob", "5", "/list")
 	sent = p.getSent()
-	if !strings.Contains(sent[len(sent)-1], "👉 1. 💬 **「Alpha」**") {
+	if listing := sent[len(sent)-1]; !strings.Contains(listing, "👉 1. **「Alpha」**\n\n") || !strings.HasPrefix(listing, "💬 共享会话（👉 为当前选择）：\n\n") || strings.Count(listing, "💬") != 1 {
 		t.Fatal(sent[len(sent)-1])
 	}
 	if err := e.Stop(); err != nil {
