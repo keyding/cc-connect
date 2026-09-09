@@ -11,11 +11,16 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"time"
 )
 
 // Shared requests are immutable after admission except for execution/result state.
 // Attachments remain in the snapshot as session materials, including after completion.
 type sharedRequest struct {
+	UserContent                                                           *string        `json:",omitempty"`
+	UserDisplayName, BotDisplayName                                       string         `json:",omitempty"`
+	QuotedMessage                                                         *QuotedMessage `json:",omitempty"`
+	SentAtMs, CompletedAtMs                                               int64          `json:",omitempty"`
 	ID                                                                    string
 	Session                                                               sharedSession
 	Platform, Scope, Entry, UserID, UserName, MessageID, Content, WorkDir string
@@ -247,6 +252,7 @@ func (q *sharedQueue) finish(index int, history, result string, success bool, ex
 	}
 	if success {
 		r.Status = "completed"
+		r.CompletedAtMs = time.Now().UnixMilli()
 	}
 	if err := q.save(next); err != nil {
 		q.requests[index].Status = "interrupted"

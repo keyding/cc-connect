@@ -715,6 +715,12 @@ const (
 	MsgSharedUnavailable      MsgKey = "shared_sharedunavailable"
 	MsgSharedExecutionPending MsgKey = "shared_sharedexecutionpending"
 	MsgSharedCommands         MsgKey = "shared_sharedcommands"
+	MsgHistoryTimeUnknown     MsgKey = "MsgHistoryTimeUnknown"
+	MsgHistoryLegacyQuote     MsgKey = "MsgHistoryLegacyQuote"
+	MsgHistoryAuthorUnknown   MsgKey = "MsgHistoryAuthorUnknown"
+	MsgHistoryQuoteLabel      MsgKey = "MsgHistoryQuoteLabel"
+	MsgHistoryViewOriginal    MsgKey = "MsgHistoryViewOriginal"
+	MsgHistoryBot             MsgKey = "MsgHistoryBot"
 	MsgSharedHistoryHeader    MsgKey = "shared_history_header"
 	MsgSharedCmdNew           MsgKey = "shared_cmd_new"
 	MsgSharedCmdList          MsgKey = "shared_cmd_list"
@@ -1164,12 +1170,54 @@ var messages = map[MsgKey]map[Language]string{
 		LangJapanese:           "共有モードのコマンド：",
 		LangSpanish:            "Comandos del modo compartido:",
 	},
+	MsgHistoryTimeUnknown: {
+		LangEnglish:            "Time unknown",
+		LangChinese:            "时间未知",
+		LangTraditionalChinese: "時間未知",
+		LangJapanese:           "時刻不明",
+		LangSpanish:            "Hora desconocida",
+	},
+	MsgHistoryLegacyQuote: {
+		LangEnglish:            "Legacy record: quotation and message were stored together.",
+		LangChinese:            "旧记录：引用与正文合并保存。",
+		LangTraditionalChinese: "舊記錄：引用與正文合併儲存。",
+		LangJapanese:           "旧記録：引用と本文が一緒に保存されています。",
+		LangSpanish:            "Registro antiguo: cita y mensaje guardados juntos.",
+	},
+	MsgHistoryAuthorUnknown: {
+		LangEnglish:            "Unknown author",
+		LangChinese:            "作者未知",
+		LangTraditionalChinese: "作者未知",
+		LangJapanese:           "投稿者不明",
+		LangSpanish:            "Autor desconocido",
+	},
+	MsgHistoryQuoteLabel: {
+		LangEnglish:            "↪ Replying to %s",
+		LangChinese:            "↪ 回复 %s",
+		LangTraditionalChinese: "↪ 回覆 %s",
+		LangJapanese:           "↪ %s への返信",
+		LangSpanish:            "↪ Respuesta a %s",
+	},
+	MsgHistoryViewOriginal: {
+		LangEnglish:            "View original",
+		LangChinese:            "查看原消息",
+		LangTraditionalChinese: "查看原訊息",
+		LangJapanese:           "元のメッセージを表示",
+		LangSpanish:            "Ver original",
+	},
+	MsgHistoryBot: {
+		LangEnglish:            "Assistant",
+		LangChinese:            "助手",
+		LangTraditionalChinese: "助手",
+		LangJapanese:           "アシスタント",
+		LangSpanish:            "Asistente",
+	},
 	MsgSharedHistoryHeader: {
-		LangEnglish:            "📜 %s — last %d completed messages",
-		LangChinese:            "📜 %s — 最近 %d 条已完成对话",
-		LangTraditionalChinese: "📜 %s — 最近 %d 筆已完成對話",
-		LangJapanese:           "📜 %s — 完了した直近 %d 件",
-		LangSpanish:            "📜 %s — últimos %d mensajes completados",
+		LangEnglish:            "📜 last %d completed messages",
+		LangChinese:            "📜 最近 %d 条已完成对话",
+		LangTraditionalChinese: "📜 最近 %d 筆已完成對話",
+		LangJapanese:           "📜 完了した直近 %d 件",
+		LangSpanish:            "📜 últimos %d mensajes completados",
 	},
 	MsgSharedCmdNew: {
 		LangEnglish:            "Create and select a shared session",

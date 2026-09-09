@@ -32,7 +32,7 @@ func (e *Engine) handleSharedDirectory(p Platform, msg *Message, command string,
 			if s.ID == scope.Selections[msg.SessionKey] {
 				marker = "👉 "
 			}
-			lines = append(lines, fmt.Sprintf("%s%d. %s [%s] (%s)", marker, i+1, s.Name, s.AgentType, s.ID))
+			lines = append(lines, fmt.Sprintf("%s%d. %s\n%s · `%s`", marker, i+1, sharedSessionTitle(s.Name), s.AgentType, s.ID))
 		}
 		if len(scope.Sessions) == 0 {
 			lines = append(lines, e.i18n.T(MsgSharedChoose))
@@ -46,7 +46,7 @@ func (e *Engine) handleSharedDirectory(p Platform, msg *Message, command string,
 				e.replySharedHistory(p, msg, s, args)
 				return
 			}
-			text := e.i18n.Tf(MsgSharedCurrent, s.Name, s.AgentType, s.ID)
+			text := e.i18n.Tf(MsgSharedCurrent, sharedSessionTitle(s.Name)+"\n", s.AgentType, "`"+s.ID+"`")
 			if command == "" {
 				e.acceptSharedRequest(p, msg, s)
 				return

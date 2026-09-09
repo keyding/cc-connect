@@ -403,8 +403,14 @@ type LocationAttachment struct {
 	ProximityAlertRadius int     // maximum distance for proximity alerts in meters (optional)
 }
 
+// QuotedMessage is presentation metadata only; it never authorizes reply routing.
+type QuotedMessage struct{ Author, Text, URL string }
+
 // Message represents a unified incoming message from any platform.
 type Message struct {
+	UserDisplayName string
+	BotDisplayName  string
+	QuotedMessage   *QuotedMessage
 	// SharedScope is an explicit platform group identity for the opt-in shared directory.
 	// SessionKey remains the personal or common default-selection entry.
 	SharedScope string

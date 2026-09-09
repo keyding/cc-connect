@@ -602,6 +602,14 @@ func (p *Platform) sharedScope(chat models.Chat) string {
 
 func (p *Platform) dispatchMessage(msg *core.Message, tgMsg *models.Message) {
 	msg.SharedScope = p.sharedScope(tgMsg.Chat)
+	if tgMsg.Date > 0 {
+		msg.UserMessageTimeMs = int64(tgMsg.Date) * 1000
+	}
+	msg.UserDisplayName = telegramHistoryName(tgMsg.From)
+	p.mu.RLock()
+	msg.BotDisplayName = telegramHistoryName(p.selfUser)
+	p.mu.RUnlock()
+	msg.QuotedMessage = telegramHistoryQuote(tgMsg)
 	msg.BotReply = p.replyReference(tgMsg)
 	// Enrich with platform-specific context (reply quotes, location text, etc.)
 	var extras []string
