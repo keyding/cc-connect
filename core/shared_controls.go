@@ -126,7 +126,7 @@ func (e *Engine) sharedControlLocked(q *sharedQueue, scope sharedScope, msg *Mes
 func (e *Engine) sharedQueueView(q *sharedQueue, s sharedSession) string {
 	lines := []string{e.i18n.Tf(MsgQueueTitle, "「"+sharedDisplayLabel(s.Name)+"」", "`"+s.ID+"`")}
 	if r := q.uncertainAdmission; r != nil && r.Session.ID == s.ID {
-		lines = append(lines, e.i18n.Tf(MsgQueueEntry, r.ID, sharedUserLabel(*r), "❌")+" — "+e.i18n.T(MsgRecoveryAdmissionStatus))
+		lines = append(lines, e.i18n.Tf(MsgQueueEntry, r.ID, sharedUserLabel(*r), "⚠️")+" — "+e.i18n.T(MsgRecoveryAdmissionStatus))
 	}
 	if q.paused {
 		lines = append(lines, e.i18n.T(MsgSharedPaused))
@@ -135,17 +135,23 @@ func (e *Engine) sharedQueueView(q *sharedQueue, s sharedSession) string {
 		if r.Session.ID != s.ID {
 			continue
 		}
-		icon, detail := "❌", MsgKey("")
+		icon, detail := "⚠️", MsgKey("")
 		switch r.Status {
 		case "completed":
 			icon = "✅"
-		case "queued", "running":
+		case "queued":
+			icon = "🕓"
+		case "running":
 			icon = "⌛️"
+		case "cancelled":
+			icon = "🚫"
 		case "stopping":
+			icon = "⌛️"
 			detail = MsgQueueStoppingStatus
 		case "interrupted":
 			detail = MsgQueueInterrupted
 		case "stopped":
+			icon = "⏹️"
 			detail = MsgQueueStopped
 		}
 		if r.Waiting && r.Status == "running" {
