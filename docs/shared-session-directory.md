@@ -81,7 +81,7 @@ shared_acceptance_messages = false    # 隐藏无需等待时的成功接收提�
 
 `shared_acceptance_messages` 默认 `true`，可在 `[projects.display]` 覆盖。设为 `false` 不改变先保存再执行的规则；同会话有前序任务或队列暂停时仍提示排队/暂停，接收失败、状态不确定和审批提示始终保留。此开关与 `instant_reply` 独立。
 
-会话名称统一显示为 `💬 **「名称」**`，用于 `/list`、`/current`、`/history` 和 `/queue`；当前条目仍用前置 `👉` 标识，完整会话及请求 ID 保留可复制。
+会话名称使用加粗的 `「名称」`。`/list` 仅在“共享会话”标题前显示 `💬`，各条目不重复图标；`/current` 在“当前会话”前显示 `💬`。标题及名称与下方内容留一个空行，列表条目之间也留空行。`/history` 的会话标题与消息计数之间留空行。当前条目仍用前置 `👉` 标识，完整会话及请求 ID 保留可复制。
 
 历史以发言人和完整北京时间（`YYYY-MM-DD HH:mm:ss (UTC+8)`）开头，本次正文在前，回复引用摘要在后。引用最多两行、120 字符；有可用 Telegram 群消息链接时提供“查看原消息”。每轮用户消息与助手回答之间留白，轮次之间用 `────────────` 分隔。链接遵循 [Telegram 消息链接格式](https://core.telegram.org/api/links#message-links)，不参与会话路由或授权。
 

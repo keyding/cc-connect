@@ -6,7 +6,11 @@ import (
 )
 
 func sharedSessionTitle(name string) string {
-	return "💬 **「" + sharedDisplayLabel(name) + "」**"
+	return "💬 " + sharedSessionName(name)
+}
+
+func sharedSessionName(name string) string {
+	return "**「" + sharedDisplayLabel(name) + "」**"
 }
 
 func sharedDisplayLabel(name string) string {

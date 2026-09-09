@@ -46,5 +46,5 @@ func (e *Engine) replySharedHistory(p Platform, msg *Message, session sharedSess
 		}
 		rendered = append(rendered, row.text)
 	}
-	e.reply(p, msg.ReplyCtx, fmt.Sprintf("%s\n%s\n\n%s", sharedSessionTitle(session.Name), e.i18n.Tf(MsgSharedHistoryHeader, len(entries)), strings.Join(rendered, "\n\n")))
+	e.reply(p, msg.ReplyCtx, fmt.Sprintf("%s\n\n%s\n\n%s", sharedSessionTitle(session.Name), e.i18n.Tf(MsgSharedHistoryHeader, len(entries)), strings.Join(rendered, "\n\n")))
 }
