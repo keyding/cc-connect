@@ -14,13 +14,20 @@ import (
 func (p *Platform) SendWithButtonsWithReceipt(ctx context.Context, target any, text string, buttons [][]core.ButtonOption, record func(core.MessageReference) error) error {
 	var rows [][]models.InlineKeyboardButton
 	for _, row := range buttons {
+		if len(row) == 0 {
+			continue
+		}
 		var converted []models.InlineKeyboardButton
 		for _, button := range row {
 			converted = append(converted, models.InlineKeyboardButton{Text: button.Text, CallbackData: button.Data})
 		}
 		rows = append(rows, converted)
 	}
-	return p.replyWithReceipt(ctx, target, text, &models.InlineKeyboardMarkup{InlineKeyboard: rows}, record)
+	var markup *models.InlineKeyboardMarkup
+	if len(rows) > 0 {
+		markup = &models.InlineKeyboardMarkup{InlineKeyboard: rows}
+	}
+	return p.replyWithReceipt(ctx, target, text, markup, record)
 }
 
 // Invalid encodings remain explicit invalid interactions rather than becoming

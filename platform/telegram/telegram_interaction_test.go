@@ -105,3 +105,26 @@ func TestSharedInteraction_InaccessibleCallbackShowsLocalizedStaleAlert(t *testi
 		t.Fatalf("alert=%q starts=%d", alert, a.starts.Load())
 	}
 }
+
+func TestSharedInteraction_TextQuestionOmitsEmptyKeyboardHTTP(t *testing.T) {
+	for _, buttons := range [][][]core.ButtonOption{nil, {}, {{}}} {
+		t.Run(fmt.Sprintf("rows-%d", len(buttons)), func(t *testing.T) {
+			p := newTelegramTestPlatform(t, func(w http.ResponseWriter, r *http.Request) {
+				if err := r.ParseMultipartForm(1 << 20); err != nil {
+					t.Error(err)
+				}
+				if r.FormValue("reply_markup") != "" {
+					w.WriteHeader(http.StatusBadRequest)
+					fmt.Fprint(w, `{"ok":false,"error_code":400,"description":"Bad Request: field inline_keyboard must be of type Array"}`)
+					return
+				}
+				fmt.Fprint(w, `{"ok":true,"result":{"message_id":101,"chat":{"id":-100,"type":"supergroup"}}}`)
+			})
+			recorded := false
+			err := p.SendWithButtonsWithReceipt(context.Background(), replyContext{chatID: -100}, "Choose multiple options or reply with notes", buttons, func(ref core.MessageReference) error { recorded = true; return nil })
+			if err != nil || !recorded {
+				t.Fatalf("text question failed: err=%v recorded=%v", err, recorded)
+			}
+		})
+	}
+}
