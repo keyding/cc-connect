@@ -3855,7 +3855,7 @@ func TestCUJ_B14_SharedHistoryAndSelectionAcrossRestart(t *testing.T) {
 
 	queueMessage(e, p, "bob", "5", "/list")
 	sent = p.getSent()
-	if listing := sent[len(sent)-1]; !strings.Contains(listing, "> 1. **「Alpha」**\n> `") || !strings.HasPrefix(listing, "共享会话：\n\n") || strings.Contains(listing, "👉") {
+	if listing := sent[len(sent)-1]; !strings.Contains(listing, "> （当前会话）\n1. **「Alpha」**\n`") || !strings.HasPrefix(listing, "共享会话：\n\n") || strings.Contains(listing, "👉") {
 		t.Fatal(sent[len(sent)-1])
 	}
 	if err := e.Stop(); err != nil {
@@ -3884,18 +3884,18 @@ func TestCUJ_B14_SharedHistoryAndSelectionAcrossRestart(t *testing.T) {
 		t.Fatalf("list must have one blank line between entries and omit agent type: %s", listing)
 	}
 	for i, entry := range entries[1:] {
-		lines := strings.Split(entry, "\n")
+		lines := strings.Split(strings.TrimPrefix(entry, "> （当前会话）\n"), "\n")
 		if len(lines) != 2 || !strings.HasPrefix(strings.TrimPrefix(lines[1], "> "), "`") {
 			t.Fatalf("entry %d must put ID directly below title: %s", i+1, entry)
 		}
 	}
 	rendered := MarkdownToSimpleHTML(listing)
-	if strings.Count(rendered, "<blockquote>") != 1 || !strings.Contains(rendered, "<blockquote>2. <b>「Beta」</b>") || strings.Contains(listing, "> 1.") || strings.Contains(listing, "👉") {
-		t.Fatalf("only current session should be quoted: %s", rendered)
+	if strings.Count(rendered, "<blockquote>") != 1 || !strings.Contains(rendered, "<blockquote>（当前会话）</blockquote>\n2. <b>「Beta」</b>") || strings.Contains(listing, "> 1.") || strings.Contains(listing, "👉") {
+		t.Fatalf("only current session label should be quoted: %s", rendered)
 	}
 	quoted := strings.Split(strings.Split(rendered, "<blockquote>")[1], "</blockquote>")[0]
-	if !strings.Contains(quoted, "<code>") || strings.Contains(quoted, "Alpha") {
-		t.Fatalf("quote must contain the selected session metadata only: %s", quoted)
+	if quoted != "（当前会话）" {
+		t.Fatalf("quote must contain only the current label: %s", quoted)
 	}
 
 	e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "other-group", SessionKey: "bob", UserID: "bob", MessageID: "9", Content: "/history", ReplyCtx: "bob"})
