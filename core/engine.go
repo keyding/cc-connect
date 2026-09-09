@@ -330,14 +330,15 @@ var RestartCh = make(chan RestartRequest, 1)
 // DisplayCfg controls how intermediate messages are surfaced.
 // A value of -1 means "use default", 0 means "no truncation".
 type DisplayCfg struct {
-	Mode             string // "full" (default), "compact", or "quiet" — thinking/tool visibility
-	CardMode         string // "legacy" (default) or "rich" (Card 2.0 Feishu)
-	ThinkingMessages bool
-	ThinkingMaxLen   int // max runes for thinking preview; 0 = no truncation
-	ToolMaxLen       int // max runes for tool use preview; 0 = no truncation
-	ToolMessages     bool
-	HistoryMaxLen    *int // max runes for /history entries; nil = default, 0 = no truncation
-	HideAgentFooter  bool // strip model/token footer lines emitted as agent text
+	SharedAcceptanceMessages *bool  // nil defaults to true; queued/paused notices always remain
+	Mode                     string // "full" (default), "compact", or "quiet" — thinking/tool visibility
+	CardMode                 string // "legacy" (default) or "rich" (Card 2.0 Feishu)
+	ThinkingMessages         bool
+	ThinkingMaxLen           int // max runes for thinking preview; 0 = no truncation
+	ToolMaxLen               int // max runes for tool use preview; 0 = no truncation
+	ToolMessages             bool
+	HistoryMaxLen            *int // max runes for /history entries; nil = default, 0 = no truncation
+	HideAgentFooter          bool // strip model/token footer lines emitted as agent text
 }
 
 // InstantReplyCfg controls the immediate confirmation reply sent when a message
@@ -1185,6 +1186,9 @@ func resolveDisabledCmds(cmds []string) map[string]bool {
 		if c == "*" {
 			for _, bc := range builtinCommands {
 				m[bc.id] = true
+			}
+			for _, sc := range sharedCommandSpecs {
+				m[sc.name] = true
 			}
 			return m
 		}
@@ -6791,7 +6795,7 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 	args := parts[1:]
 
 	cmdID := matchPrefix(cmd, builtinCommands)
-	if msg.SharedScope != "" && (cmd == "approve" || cmd == "deny" || cmd == "answer" || cmd == "queue" || cmd == "cancel" || cmd == "resume" || cmd == "resolve" || cmd == "continue") {
+	if msg.SharedScope != "" && isSharedCommand(cmd) {
 		cmdID = cmd
 	}
 
@@ -6836,10 +6840,10 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 			e.handleSharedDelete(p, msg, args)
 		case "queue", "cancel", "stop", "resume", "resolve", "continue":
 			e.handleSharedControl(p, msg, cmdID, args)
-		case "new", "list", "switch", "name", "current":
+		case "new", "list", "switch", "name", "current", "history":
 			e.handleSharedDirectory(p, msg, cmdID, args)
 		default:
-			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgSharedCommands))
+			e.reply(p, msg.ReplyCtx, e.sharedCommandHelp())
 		}
 		return true
 	}
@@ -9889,6 +9893,14 @@ func (e *Engine) GetAllCommands() []BotCommandInfo {
 
 func (e *Engine) menuCommandsForPlatform(platformName string) ([]BotCommandInfo, bool) {
 	commands := e.GetAllCommands()
+	for _, p := range e.platforms {
+		if p.Name() == platformName {
+			if shared, ok := p.(SharedSessionDirectoryProvider); ok && shared.SharedSessionDirectoryEnabled() {
+				commands = e.sharedMenuCommands()
+			}
+			break
+		}
+	}
 	if !strings.EqualFold(platformName, "telegram") {
 		return commands, false
 	}

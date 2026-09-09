@@ -55,3 +55,8 @@ allow_from = "${TELEGRAM_ALLOW_FROM}" # Telegram numeric user IDs, comma-separat
 # share_session_in_channel = false
 # token = "${CODEX_TELEGRAM_BOT_TOKEN}"
 # allow_from = "${TELEGRAM_ALLOW_FROM}"
+
+# Optional progress controls (also supported under [projects.display]):
+# [display]
+# tool_messages = false
+# shared_acceptance_messages = false # Keep queue/pause notices, hide immediate acceptance receipts.

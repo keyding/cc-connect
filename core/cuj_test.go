@@ -3828,3 +3828,53 @@ func TestCUJ_B19_SharedReplyPreservesModelAndContextFooter(t *testing.T) {
 		})
 	}
 }
+
+func TestCUJ_B14_SharedHistoryAndSelectionAcrossRestart(t *testing.T) {
+	a := &queueTestAgent{dir: t.TempDir(), calls: make(chan *queueTestSession, 10)}
+	p := &queueTestPlatform{stubPlatformEngine: stubPlatformEngine{n: "test"}}
+	path := filepath.Join(t.TempDir(), "sessions")
+	e := NewEngine("project", a, []Platform{p}, path, LangChinese)
+	t.Cleanup(func() { _ = e.Stop() })
+	queueMessage(e, p, "alice", "1", "/new Alpha")
+	queueMessage(e, p, "alice", "2", "question alpha")
+	session := nextQueueSession(t, a)
+	<-session.sent
+	session.events <- Event{Type: EventResult, Done: true, Content: "answer alpha"}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "answer alpha") })
+	queueMessage(e, p, "bob", "3", "/switch Alpha")
+	queueMessage(e, p, "bob", "4", "/history")
+	sent := p.getSent()
+	got := sent[len(sent)-1]
+	if !strings.Contains(got, "question alpha") || !strings.Contains(got, "answer alpha") {
+		t.Fatalf("history unavailable: %s", got)
+	}
+
+	queueMessage(e, p, "bob", "5", "/list")
+	sent = p.getSent()
+	if !strings.Contains(sent[len(sent)-1], "👉 1. Alpha") {
+		t.Fatal(sent[len(sent)-1])
+	}
+	if err := e.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	e = NewEngine("project", a, []Platform{p}, path, LangChinese)
+	t.Cleanup(func() { _ = e.Stop() })
+	queueMessage(e, p, "bob", "6", "/history 1")
+	sent = p.getSent()
+	got = sent[len(sent)-1]
+	if !strings.Contains(got, "answer alpha") || strings.Contains(got, "question alpha") {
+		t.Fatal(got)
+	}
+	queueMessage(e, p, "bob", "7", "/new Beta")
+	queueMessage(e, p, "bob", "8", "/history")
+	sent = p.getSent()
+	got = sent[len(sent)-1]
+	if strings.Contains(got, "alpha") || got != e.i18n.T(MsgHistoryEmpty) {
+		t.Fatal(got)
+	}
+	e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "other-group", SessionKey: "bob", UserID: "bob", MessageID: "9", Content: "/history", ReplyCtx: "bob"})
+	sent = p.getSent()
+	if strings.Contains(sent[len(sent)-1], "alpha") {
+		t.Fatal("history leaked across groups")
+	}
+}

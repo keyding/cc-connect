@@ -1942,3 +1942,5 @@ func (p *Platform) dispatchSharedDenial(chat models.Chat, threadID int, userID i
 		handler(p, &core.Message{Platform: "telegram", SharedScope: scope, UserID: strconv.FormatInt(userID, 10), SessionKey: p.buildSessionKey(chat.ID, threadID, userID), ReplyCtx: target})
 	}
 }
+
+func (p *Platform) SharedSessionDirectoryEnabled() bool { return p.sharedSessionDirectory }

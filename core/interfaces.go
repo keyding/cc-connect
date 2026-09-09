@@ -705,3 +705,6 @@ type DurableReplyContext interface {
 // AgentSessionSettler confirms executor teardown, not merely a stop request.
 // Used before releasing a shared working directory for another request.
 type AgentSessionSettler interface{ WaitForExit(context.Context) error }
+
+// SharedSessionDirectoryProvider selects commands supported by the shared directory.
+type SharedSessionDirectoryProvider interface{ SharedSessionDirectoryEnabled() bool }

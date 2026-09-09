@@ -30,6 +30,8 @@ Claude Code 使用已配置的本地 CLI。Codex 默认 `backend="exec"` 没有�
 | `/switch <序号、完整名称或稳定 ID>` | 改变本入口默认；数字优先解释为序号。 |
 | `/name <新名称>` 或 `/rename <新名称>` | 改名当前会话；首尾空白、ASCII 大小写不构成区别。 |
 | `/current` | 查看当前选择。未选择时先创建/选择，原消息不会留待自动执行。 |
+| `/history [条数]` | 查看当前共享会话最近的已完成对话，默认 10 条消息；跨用户、跨 Topic 及重启后可用。只读取本实例保存的请求和结果，不导入 Agent 账号旧历史。 |
+| `/help` | 查看当前共享模式支持的命令和说明，与 Bot 菜单使用同一清单。 |
 
 `share_session_in_channel=false` 时每人每 Topic 独立选择；true 时同 Topic 的授权成员共用默认。无 Topic 时使用群入口。目录不跨群、项目或平台共享。
 
@@ -65,3 +67,16 @@ Claude Code 使用已配置的本地 CLI。Codex 默认 `backend="exec"` 没有�
 `/delete [会话 ID]` 只允许删除无待处理请求的会话；按返回的 `/delete <token> confirm` 再确认，token 不是会话 ID。新增任务会使旧确认失效。删除移除目录、默认选择与消息关联，保留代码、worktree、Agent 历史及已保留的任务材料；不以此清理旧数据。
 
 自动化包含真实文件重建、可控 CLI 子进程、Telegram HTTP 契约和故障注入。它们不代替两个真实账号、两个 Topic、两种选择模式及两个真实 Agent 的联合验收，也不授权切换现有服务。
+
+## 显示与命令菜单
+
+`/list` 在当前选择的条目前显示 `👉`，序号及 `/switch` 的对应关系不变。
+启用共享目录后，Bot 菜单公布共享模式已接入的命令；`/help` 同时说明参数和别名。恢复、审批、历史等命令均提供五种语言说明，项目禁用的命令不在菜单中显示。未接入共享模式的旧命令不会因菜单展示而获得执行权限。
+
+```toml
+[display]
+tool_messages = false                 # 隐藏工具进度提示
+shared_acceptance_messages = false    # 隐藏无需等待时的成功接收提示
+```
+
+`shared_acceptance_messages` 默认 `true`，可在 `[projects.display]` 覆盖。设为 `false` 不改变先保存再执行的规则；同会话有前序任务或队列暂停时仍提示排队/暂停，接收失败、状态不确定和审批提示始终保留。此开关与 `instant_reply` 独立。
