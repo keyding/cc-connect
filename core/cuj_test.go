@@ -2905,7 +2905,7 @@ func TestCUJ_B16_SharedQueueStopCancelAndExplicitResume(t *testing.T) {
 	listing := send("bob", "6", "/queue")
 	requestID := func(user string, text string) string {
 		for _, line := range strings.Split(text, "\n") {
-			if strings.HasPrefix(line, "⌛️ ") && strings.HasSuffix(line, " ("+user+")") {
+			if (strings.HasPrefix(line, "⌛️ ") || strings.HasPrefix(line, "🕓 ")) && strings.HasSuffix(line, " ("+user+")") {
 				return strings.Fields(line)[1]
 			}
 		}
@@ -2975,7 +2975,7 @@ func TestCUJ_B16_SharedQueueStopCancelAndExplicitResume(t *testing.T) {
 	before := len(p.getSent())
 	queueMessage(reopened, p, "alice", "17", "/queue")
 	got := strings.Join(p.getSent()[before:], "\n")
-	if !strings.Contains(got, "❌ "+cancelID+" (bob)") {
+	if !strings.Contains(got, "🚫 "+cancelID+" (bob)") {
 		t.Fatal(got)
 	}
 	noQueueSession(t, a)
@@ -3548,7 +3548,7 @@ func TestCUJ_B20_RestartTimeoutAndRevokedInteractionEntries(t *testing.T) {
 				t.Fatal(got)
 			}
 			send("bob", "7", "/queue", nil)
-			if got := strings.Join(p.getSent(), "\n"); !regexp.MustCompile(`(?m)^⌛️ [^\n]+ \(bob\)$`).MatchString(got) {
+			if got := strings.Join(p.getSent(), "\n"); !regexp.MustCompile(`(?m)^🕓 [^\n]+ \(bob\)$`).MatchString(got) {
 				t.Fatal(got)
 			}
 			if mode == "restart" {
@@ -3608,7 +3608,7 @@ func TestCUJ_B21_RevocationCancelsOwnQueueAndStopsWaitingExecutor(t *testing.T) 
 	}
 	noInteractionDecision(t, a)
 	listing := send("bob", "20", "/queue")
-	if !regexp.MustCompile(`(?m)^❌ [^\n]+ \(alice\)$`).MatchString(listing) || !strings.Contains(listing, "stop requested; awaiting exit") || !regexp.MustCompile(`(?m)^⌛️ [^\n]+ \(bob\)$`).MatchString(listing) {
+	if !regexp.MustCompile(`(?m)^🚫 [^\n]+ \(alice\)$`).MatchString(listing) || !strings.Contains(listing, "stop requested; awaiting exit") || !regexp.MustCompile(`(?m)^🕓 [^\n]+ \(bob\)$`).MatchString(listing) {
 		t.Fatal(listing)
 	}
 	if got := send("bob", "21", "/delete"); !strings.Contains(got, e.i18n.T(MsgSharedDeleteBusy)) {
@@ -3787,7 +3787,7 @@ func TestCUJ_B21_RestartRechecksQueuedRequestOwnersBeforeDispatch(t *testing.T) 
 	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "Bob completed") })
 	noQueueSession(t, a)
 	send("bob", "5", "/queue")
-	if got := strings.Join(p.getSent(), "\n"); !regexp.MustCompile(`(?m)^❌ [^\n]+ \(alice\)$`).MatchString(got) {
+	if got := strings.Join(p.getSent(), "\n"); !regexp.MustCompile(`(?m)^🚫 [^\n]+ \(alice\)$`).MatchString(got) {
 		t.Fatal(got)
 	}
 }

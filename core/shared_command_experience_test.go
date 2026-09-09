@@ -147,8 +147,36 @@ func TestSharedQueueCompactPresentation(t *testing.T) {
 		{ID: "session-id-16", Session: session, Status: "running", UserID: "456"},
 		{ID: "hidden", Session: sharedSession{ID: "other"}, Status: "completed"},
 	}}
-	want := "会话 :「更新个人网站」（`session-id`）\n\n任务队列：\n\n✅ session-id-1（Caven）\n⌛️ session-id-15（Caven）\n❌ session-id-12（Caven）\n⌛️ session-id-16（456）"
+	want := "会话 :「更新个人网站」（`session-id`）\n\n任务队列：\n\n✅ session-id-1（Caven）\n🕓 session-id-15（Caven）\n🚫 session-id-12（Caven）\n⌛️ session-id-16（456）"
 	if got := e.sharedQueueView(q, session); got != want {
 		t.Fatalf("queue layout mismatch:\n%s", got)
+	}
+}
+
+func TestSharedQueueExceptionalStateIcons(t *testing.T) {
+	e, _, _ := newQueueEngine(t, t.TempDir(), filepath.Join(t.TempDir(), "sessions"))
+	session := sharedSession{ID: "session", Name: "test"}
+	for _, tc := range []struct {
+		status, icon string
+		waiting      bool
+		detail       MsgKey
+		action       string
+	}{
+		{"stopping", "⌛️", false, MsgQueueStoppingStatus, ""},
+		{"stopped", "⏹️", false, MsgQueueStopped, "/resume task"},
+		{"interrupted", "⚠️", false, MsgQueueInterrupted, "/resolve task\n/continue task"},
+		{"running", "⌛️", true, MsgInteractionWaiting, ""},
+	} {
+		t.Run(tc.status, func(t *testing.T) {
+			q := &sharedQueue{requests: []sharedRequest{{ID: "task", Session: session, Status: tc.status, Waiting: tc.waiting, UserID: "alice"}}}
+			got := e.sharedQueueView(q, session)
+			if !strings.Contains(got, tc.icon+" task (alice) — "+e.i18n.T(tc.detail)) || (tc.action != "" && !strings.Contains(got, tc.action)) {
+				t.Fatal(got)
+			}
+		})
+	}
+	q := &sharedQueue{uncertainAdmission: &sharedRequest{ID: "task", Session: session, UserID: "alice"}}
+	if got := e.sharedQueueView(q, session); !strings.Contains(got, "⚠️ task (alice) — "+e.i18n.T(MsgRecoveryAdmissionStatus)) {
+		t.Fatal(got)
 	}
 }
