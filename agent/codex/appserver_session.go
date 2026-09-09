@@ -553,16 +553,51 @@ func (s *appServerSession) stageImages(prompt string, images []core.ImageAttachm
 
 func (s *appServerSession) RespondPermission(requestID string, result core.PermissionResult) error {
 	s.approvalsMu.Lock()
+	defer s.approvalsMu.Unlock()
 	ch := s.pendingApprovals[requestID]
-	s.approvalsMu.Unlock()
-	if ch == nil {
+	if ch == nil || (s.ctx != nil && s.ctx.Err() != nil) {
 		return fmt.Errorf("codex app-server: no pending approval for request %s", requestID)
 	}
-	select {
-	case ch <- result:
-	default:
-	}
+	// Consume under the same lock as expiry: only one response can win.
+	delete(s.pendingApprovals, requestID)
+	ch <- result
 	return nil
+}
+
+// waitApproval preserves the existing deadline while making expiry terminal for
+// this interaction. Sending a denial on timeout could let the turn continue and
+// appear successful, so the engine must receive an error instead.
+func (s *appServerSession) waitApproval(requestID string, ch chan core.PermissionResult, expired <-chan time.Time) (core.PermissionResult, bool) {
+	select {
+	case result := <-ch:
+		return result, true
+	case <-s.ctx.Done():
+		s.approvalsMu.Lock()
+		delete(s.pendingApprovals, requestID)
+		s.approvalsMu.Unlock()
+		return core.PermissionResult{}, false
+	case <-expired:
+	}
+
+	s.approvalsMu.Lock()
+	pending := s.pendingApprovals[requestID] == ch
+	if pending {
+		delete(s.pendingApprovals, requestID)
+		// Close uses this lock too, so expiry cannot send on closed events.
+		// Unlike progress events, this terminal error must not be dropped.
+		if s.ctx.Err() == nil {
+			select {
+			case s.events <- core.Event{Type: core.EventError, Error: fmt.Errorf("codex app-server: interaction %s timed out", requestID)}:
+			case <-s.ctx.Done():
+			}
+		}
+	}
+	s.approvalsMu.Unlock()
+	if !pending {
+		// A response acquired the lock first and is already buffered.
+		return <-ch, true
+	}
+	return core.PermissionResult{}, false
 }
 
 func (s *appServerSession) handleServerRequest(probe map[string]json.RawMessage) {
@@ -631,17 +666,10 @@ func (s *appServerSession) handleApprovalRequest(rawID json.RawMessage, method s
 	go func() {
 		timer := time.NewTimer(5 * time.Minute)
 		defer timer.Stop()
-		var result core.PermissionResult
-		select {
-		case result = <-ch:
-		case <-s.ctx.Done():
-			result = core.PermissionResult{Behavior: "deny"}
-		case <-timer.C:
-			result = core.PermissionResult{Behavior: "deny"}
+		result, ok := s.waitApproval(requestID, ch, timer.C)
+		if !ok {
+			return
 		}
-		s.approvalsMu.Lock()
-		delete(s.pendingApprovals, requestID)
-		s.approvalsMu.Unlock()
 
 		decision := "decline"
 		if strings.EqualFold(result.Behavior, "allow") {
@@ -678,17 +706,10 @@ func (s *appServerSession) handlePermissionsApproval(rawID json.RawMessage, para
 	go func() {
 		timer := time.NewTimer(5 * time.Minute)
 		defer timer.Stop()
-		var result core.PermissionResult
-		select {
-		case result = <-ch:
-		case <-s.ctx.Done():
-			result = core.PermissionResult{Behavior: "deny"}
-		case <-timer.C:
-			result = core.PermissionResult{Behavior: "deny"}
+		result, ok := s.waitApproval(requestID, ch, timer.C)
+		if !ok {
+			return
 		}
-		s.approvalsMu.Lock()
-		delete(s.pendingApprovals, requestID)
-		s.approvalsMu.Unlock()
 
 		if strings.EqualFold(result.Behavior, "allow") {
 			perms := params["permissions"]
@@ -747,17 +768,10 @@ func (s *appServerSession) handleRequestUserInput(rawID json.RawMessage, paramsR
 	go func() {
 		timer := time.NewTimer(5 * time.Minute)
 		defer timer.Stop()
-		var result core.PermissionResult
-		select {
-		case result = <-ch:
-		case <-s.ctx.Done():
-			result = core.PermissionResult{Behavior: "deny"}
-		case <-timer.C:
-			result = core.PermissionResult{Behavior: "deny"}
+		result, ok := s.waitApproval(requestID, ch, timer.C)
+		if !ok {
+			return
 		}
-		s.approvalsMu.Lock()
-		delete(s.pendingApprovals, requestID)
-		s.approvalsMu.Unlock()
 
 		response := appServerRequestUserInputResponseFromResult(params.Questions, result)
 		_ = s.writeJSON(map[string]any{
@@ -974,9 +988,11 @@ func (s *appServerSession) Close() error {
 	case <-time.After(2 * time.Second):
 	}
 
+	s.approvalsMu.Lock()
 	s.closeOnce.Do(func() {
 		close(s.events)
 	})
+	s.approvalsMu.Unlock()
 	return nil
 }
 
