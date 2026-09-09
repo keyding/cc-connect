@@ -1,6 +1,6 @@
 # Spec #13 验证记录
 
-范围：[Spec #13](https://github.com/keyding/cc-connect/issues/13) 及 #14–#22。基线 `e0e49036f78bd6062f793654c67ff4dd25101cb3` 已包含 #14、#15。当前记录以集成提交 `565a2f48` 为实现基准；本 PR 不合并、不切换现有服务。
+范围：[Spec #13](https://github.com/keyding/cc-connect/issues/13) 及 #14–#22。基线 `e0e49036f78bd6062f793654c67ff4dd25101cb3` 已包含 #14、#15。完整功能集成为 `565a2f48`，审查修正集成为 `886bdee882610f8de7a9a82c0192360310594184`；本 PR 不合并、不切换现有服务。
 
 依赖：#15 → #16 → #17 → #20；#15 → #18 → #19；#18 + #20 → #21；#19 + #21 → #22。
 
@@ -34,10 +34,10 @@
 
 | 最终门槛 | 状态 / 待填写证据 |
 | --- | --- |
-| 最终代码审查与问题修复 | PENDING：审查基准、结论、修正提交 |
-| 最终 PR head 构建、全量测试、CUJ、race、增量 lint | PENDING：精确 SHA 与结果 |
-| 最终 PR head CI | PENDING：精确 SHA、运行 URL、各 job 结果 |
-| PR ready for review | PENDING：在审查与最终 CI 通过后设置 |
+| 最终代码审查与问题修复 | PASS：独立双轴初审、单一实施 Agent 修复及复核；剩余已确认问题 0。详见 [审查记录](spec-13-review.md)。 |
+| 审查修正的本地验证 | PASS：`126579ad7b4e5a5989d44f90b71e7f2bd6f41be2` 构建、全量测试、全部 CUJ、相关包 race、增量 lint；`886bdee8` 集成后的 core/Telegram/CUJ 通过。最终 head 由 CI 再验证。 |
+| 最终 PR head CI | 精确 SHA、运行链接和各 job 结果记录在 [PR #25](https://github.com/keyding/cc-connect/pull/25) 正文与 Checks；必须核对最新提交，不能使用上面的阶段结果替代。 |
+| PR ready for review | 本文提交时仍为 Draft；审查与最新提交 CI 全部通过后设置，实际状态见 [PR #25](https://github.com/keyding/cc-connect/pull/25)。 |
 | PR 合并及生产切换 | 不执行，超出本次授权 |
 
 ## 真实联合验收矩阵（#22）
