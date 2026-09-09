@@ -708,6 +708,7 @@ const (
 	MsgSharedDuplicate          MsgKey = "shared_duplicate"
 	MsgSharedChoose             MsgKey = "shared_sharedchoose"
 	MsgSharedList               MsgKey = "shared_sharedlist"
+	MsgSharedMessageCount       MsgKey = "shared_message_count"
 	MsgSharedCurrentLabel       MsgKey = "shared_current_label"
 	MsgSharedCurrent            MsgKey = "shared_sharedcurrent"
 	MsgSharedNameConflict       MsgKey = "shared_sharednameconflict"
@@ -1154,6 +1155,13 @@ var messages = map[MsgKey]map[Language]string{
 		LangTraditionalChinese: "共享會話：",
 		LangJapanese:           "共有会話：",
 		LangSpanish:            "Sesiones compartidas:",
+	},
+	MsgSharedMessageCount: {
+		LangEnglish:            "Messages: %d",
+		LangChinese:            "%d 条消息",
+		LangTraditionalChinese: "%d 則訊息",
+		LangJapanese:           "メッセージ数：%d",
+		LangSpanish:            "Mensajes: %d",
 	},
 	MsgSharedCurrentLabel: {
 		LangEnglish:            "Current session",
