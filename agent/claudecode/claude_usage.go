@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -46,11 +45,25 @@ type claudeUsageProbeState struct {
 	usageSentAt     time.Time
 }
 
-func (a *Agent) GetUsage(ctx context.Context) (*core.UsageReport, error) {
-	if _, err := exec.LookPath("claude"); err != nil {
-		return nil, fmt.Errorf("claudecode: 'claude' CLI not found in PATH")
-	}
+// usageOutputBuffer is written by os/exec while the probe polls diagnostics.
+type usageOutputBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
 
+func (b *usageOutputBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *usageOutputBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func (a *Agent) GetUsage(ctx context.Context) (*core.UsageReport, error) {
 	screen, err := a.runClaudeUsageProbe(ctx)
 	if err != nil {
 		return nil, err
@@ -59,6 +72,12 @@ func (a *Agent) GetUsage(ctx context.Context) (*core.UsageReport, error) {
 }
 
 func (a *Agent) runClaudeUsageProbe(ctx context.Context) (string, error) {
+	a.mu.Lock()
+	cli, extraArgs, argsFlag, spawn := a.cmd, append([]string(nil), a.cliExtraArgs...), a.cmdArgsFlag, a.spawnOpts
+	a.mu.Unlock()
+	if cli == "" {
+		cli = "claude"
+	}
 	probeCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -73,7 +92,19 @@ func (a *Agent) runClaudeUsageProbe(ctx context.Context) (string, error) {
 		"--permission-mode", "plan",
 		"--no-chrome",
 	}
-	cmd := exec.CommandContext(probeCtx, "claude", args...)
+	if argsFlag != "" {
+		args = []string{argsFlag, shellJoinArgs(args)}
+	}
+	args = append(extraArgs, args...)
+	// A usage query uses the target account home under sudo -i, not the
+	// supervisor temp directory or a project workspace.
+	spawn.WorkDir = ""
+	if spawn.IsolationMode() {
+		if err := core.VerifyRunAsUserCheap(probeCtx, core.ExecSudoRunner{}, spawn.RunAsUser); err != nil {
+			return "", fmt.Errorf("claudecode: usage spawn refused: %w", err)
+		}
+	}
+	cmd := core.BuildSpawnCommand(probeCtx, spawn, cli, args...)
 	cmd.Dir = workDir
 
 	env := filterEnv(os.Environ(), "CLAUDECODE")
@@ -82,9 +113,9 @@ func (a *Agent) runClaudeUsageProbe(ctx context.Context) (string, error) {
 	if extra := a.usageProbeEnv(); len(extra) > 0 {
 		env = core.MergeEnv(env, extra)
 	}
-	cmd.Env = env
+	cmd.Env = core.FilterEnvForSpawn(env, spawn)
 
-	var stderr bytes.Buffer
+	var stderr usageOutputBuffer
 	cmd.Stderr = &stderr
 
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: 40, Cols: 120})
@@ -102,6 +133,9 @@ func (a *Agent) runClaudeUsageProbe(ctx context.Context) (string, error) {
 	terminal := newClaudeUsageTerminal()
 	readDone := make(chan error, 1)
 	go func() {
+		// Both the probe loop and cleanup wait for completion. Closing the
+		// channel keeps completion observable after the result is consumed.
+		defer close(readDone)
 		buf := make([]byte, 4096)
 		for {
 			n, err := ptmx.Read(buf)
@@ -159,9 +193,13 @@ func (a *Agent) runClaudeUsageProbe(ctx context.Context) (string, error) {
 			}
 			return "", fmt.Errorf("claudecode: timed out waiting for Claude Code /usage panel: %w", probeCtx.Err())
 		case err := <-readDone:
+			if usageScreen != "" {
+				return usageScreen, nil
+			}
 			if err != nil {
 				return "", fmt.Errorf("claudecode: read Claude Code /usage output: %w", err)
 			}
+			return "", fmt.Errorf("claudecode: Claude Code terminal closed before /usage rendered")
 		case <-processDone:
 			if usageScreen != "" {
 				return usageScreen, nil
