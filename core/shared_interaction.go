@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// InteractionResponse is an explicit action, never inferred from ordinary text.
+// InteractionResponse is an explicit action or a reply bound to one question.
 // The token binds a request and one current Agent question generation.
 type InteractionResponse struct {
 	Token, Action, Answer string
@@ -27,6 +27,7 @@ type sharedInteraction struct {
 	event     Event
 	ctx       context.Context
 	answers   map[int]string
+	replies   map[string]int        // message key -> question index; -1 is an approval prompt
 	decisions chan PermissionResult // one accepted response; receiver owns lifecycle, never closed
 }
 
@@ -90,6 +91,14 @@ func (e *Engine) sendSharedInteraction(pending *sharedInteraction) error {
 	if err != nil {
 		return err
 	}
+	if len(pending.event.Questions) > 0 {
+		for i := range pending.event.Questions {
+			if err := e.sendSharedQuestion(p.Platform, target, pending, i); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	text := e.i18n.Tf(MsgInteractionPrompt, r.Session.Name, r.UserID, pending.event.ToolName)
 	detail := pending.event.ToolInput
 	if detail == "" && len(pending.event.ToolInputRaw) > 0 {
@@ -108,39 +117,86 @@ func (e *Engine) sendSharedInteraction(pending *sharedInteraction) error {
 	if detail != "" {
 		text += "\n" + truncateIf(detail, limit)
 	}
+	text += "\n/approve " + pending.token + "\n/deny " + pending.token
+	buttons := [][]ButtonOption{{{Text: e.i18n.T(MsgInteractionAllow), Data: "shared:" + pending.token + ":allow"}, {Text: e.i18n.T(MsgInteractionDeny), Data: "shared:" + pending.token + ":deny"}}}
+	text += "\n" + e.i18n.T(MsgInteractionHint)
+	return e.sendSharedInteractionMessage(p.Platform, target, pending, -1, text, buttons)
+}
+
+func (e *Engine) sendSharedQuestion(p Platform, target any, pending *sharedInteraction, i int) error {
+	r, question := pending.request, pending.event.Questions[i]
+	text := e.i18n.Tf(MsgInteractionPrompt, r.Session.Name, r.UserID, pending.event.ToolName)
+	text += fmt.Sprintf("\n\n%d. %s", i+1, question.Question)
 	var buttons [][]ButtonOption
-	if len(pending.event.Questions) == 0 {
-		text += "\n/approve " + pending.token + "\n/deny " + pending.token
-		buttons = [][]ButtonOption{{{Text: e.i18n.T(MsgInteractionAllow), Data: "shared:" + pending.token + ":allow"}, {Text: e.i18n.T(MsgInteractionDeny), Data: "shared:" + pending.token + ":deny"}}}
-	} else {
-		for i, question := range pending.event.Questions {
-			text += fmt.Sprintf("\n%d. %s", i+1, question.Question)
-			for j, opt := range question.Options {
-				text += fmt.Sprintf("\n  %d. %s", j+1, opt.Label)
-				if !question.MultiSelect {
-					buttons = append(buttons, []ButtonOption{{Text: fmt.Sprintf("%d.%d %s", i+1, j+1, opt.Label), Data: fmt.Sprintf("shared:%s:q%d:o%d", pending.token, i, j)}})
-				}
-			}
-			text += "\n" + e.i18n.Tf(MsgInteractionAnswerUsage, pending.token, i+1)
+	for j, opt := range question.Options {
+		text += fmt.Sprintf("\n  %d. %s", j+1, opt.Label)
+		if !question.MultiSelect {
+			buttons = append(buttons, []ButtonOption{{Text: fmt.Sprintf("%d.%d %s", i+1, j+1, opt.Label), Data: fmt.Sprintf("shared:%s:q%d:o%d", pending.token, i, j)}})
 		}
 	}
-	text += "\n" + e.i18n.T(MsgInteractionHint)
+	text += "\n\n" + e.i18n.T(MsgInteractionReplyHint)
+	text += "\n" + e.i18n.Tf(MsgInteractionAnswerUsage, pending.token, i+1)
+	return e.sendSharedInteractionMessage(p, target, pending, i, text, buttons)
+}
+
+// Persist the interaction marker before binding its live reply target. The
+// marker survives restart so stale replies can never become new tasks.
+func (e *Engine) sendSharedInteractionMessage(p Platform, target any, pending *sharedInteraction, question int, text string, buttons [][]ButtonOption) error {
+	r := pending.request
 	record := func(ref MessageReference) error {
-		return e.sharedDirectory.recordMessageKind(e.name, r.Platform, r.Scope, r.Session.ID, ref, true)
+		if err := e.sharedDirectory.recordMessageKind(e.name, r.Platform, r.Scope, r.Session.ID, ref, true); err != nil {
+			return err
+		}
+		q := e.sharedQueue
+		q.mu.Lock()
+		defer q.mu.Unlock()
+		if q.interactions[pending.token] != pending || pending.ctx.Err() != nil {
+			return fmt.Errorf("interaction expired during publication")
+		}
+		if pending.replies == nil {
+			pending.replies = map[string]int{}
+		}
+		key := sharedMessageKey(e.name, r.Platform, ref)
+		if old, exists := pending.replies[key]; exists && old != question {
+			return fmt.Errorf("conflicting question receipt")
+		}
+		pending.replies[key] = question
+		return nil
 	}
-	if sender, ok := p.Platform.(ReceiptButtonSender); ok {
+	if sender, ok := p.(ReceiptButtonSender); ok {
 		return sender.SendWithButtonsWithReceipt(pending.ctx, target, text, buttons, record)
 	}
-	if sender, ok := p.Platform.(ReceiptReplySender); ok {
+	if sender, ok := p.(ReceiptReplySender); ok {
 		return sender.ReplyWithReceipt(pending.ctx, target, text, record)
 	}
-	return p.Platform.Reply(pending.ctx, target, text)
+	return p.Reply(pending.ctx, target, text)
 }
 
 func (d *sharedDirectory) isInteractionMessage(project, platform, scope string, ref MessageReference) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.loadErr == nil && ref.Scope == scope && d.state.InteractionLinks[sharedMessageKey(project, platform, ref)]
+}
+
+func (e *Engine) replySharedInteraction(p Platform, msg *Message) {
+	q := e.sharedQueue
+	q.mu.Lock()
+	key := sharedMessageKey(e.name, msg.Platform, *msg.BotReply)
+	var response InteractionResponse
+	approval := false
+	for token, pending := range q.interactions {
+		if question, ok := pending.replies[key]; ok {
+			approval = question < 0
+			response = InteractionResponse{Token: token, Action: "answer", Question: question, Answer: msg.Content}
+			break
+		}
+	}
+	q.mu.Unlock()
+	if approval {
+		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgInteractionHint))
+		return
+	}
+	e.handleSharedInteraction(p, msg, response)
 }
 
 func (e *Engine) handleSharedInteraction(p Platform, msg *Message, response InteractionResponse) {

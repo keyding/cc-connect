@@ -91,7 +91,7 @@ func (d *sharedDirectory) resolveMessage(project, platform, scope string, ref Me
 
 func (e *Engine) routeSharedReply(p Platform, msg *Message) {
 	if e.sharedDirectory.isInteractionMessage(e.name, msg.Platform, msg.SharedScope, *msg.BotReply) {
-		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgInteractionHint))
+		e.replySharedInteraction(p, msg)
 		return
 	}
 	s, ok := e.sharedDirectory.resolveMessage(e.name, msg.Platform, msg.SharedScope, *msg.BotReply)

@@ -784,6 +784,7 @@ const (
 const (
 	MsgInteractionPrompt      MsgKey = "shared_interaction_prompt"
 	MsgInteractionHint        MsgKey = "shared_interaction_hint"
+	MsgInteractionReplyHint   MsgKey = "interaction_reply_hint"
 	MsgInteractionAnswerUsage MsgKey = "shared_interaction_answerusage"
 	MsgInteractionDenied      MsgKey = "shared_interaction_denied"
 	MsgInteractionStale       MsgKey = "shared_interaction_stale"
@@ -852,6 +853,13 @@ var messages = map[MsgKey]map[Language]string{
 		LangTraditionalChinese: "請使用目前按鈕或明確的 /approve、/deny、/answer 入口。普通回覆此提示不會批准或提交任務。",
 		LangJapanese:           "現在のボタンまたは /approve、/deny、/answer を使ってください。この通知への通常返信は承認やタスクになりません。",
 		LangSpanish:            "Usa los botones actuales o /approve, /deny o /answer. Responder normalmente a este aviso no aprueba ni envía tareas.",
+	},
+	MsgInteractionReplyHint: {
+		LangEnglish:            "Choose a button or reply to this message with your answer. For multiple choices, use numbers such as 1,3.",
+		LangChinese:            "可点击选项按钮，或直接回复这条消息作答。多选请填写编号，例如 1,3。",
+		LangTraditionalChinese: "可點選選項按鈕，或直接回覆這則訊息作答。多選請填寫編號，例如 1,3。",
+		LangJapanese:           "ボタンを選ぶか、このメッセージに返信してください。複数選択は 1,3 のように番号を入力します。",
+		LangSpanish:            "Elige un botón o responde a este mensaje. Para varias opciones, escribe números como 1,3.",
 	},
 	MsgInteractionAnswerUsage: {
 		LangEnglish:            "Answer explicitly: /answer %s %d <answer or option numbers>",
