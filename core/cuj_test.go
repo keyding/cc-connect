@@ -3855,7 +3855,7 @@ func TestCUJ_B14_SharedHistoryAndSelectionAcrossRestart(t *testing.T) {
 
 	queueMessage(e, p, "bob", "5", "/list")
 	sent = p.getSent()
-	if listing := sent[len(sent)-1]; !strings.Contains(listing, "> 当前会话\n1. **「Alpha」**\n`") || !strings.HasPrefix(listing, "共享会话：\n\n") || strings.Contains(listing, "👉") {
+	if listing := sent[len(sent)-1]; !strings.Contains(listing, "> 当前会话\n1. **「Alpha」**\n2 条消息\n`") || !strings.HasPrefix(listing, "共享会话：\n\n") || strings.Contains(listing, "👉") {
 		t.Fatal(sent[len(sent)-1])
 	}
 	if err := e.Stop(); err != nil {
@@ -3885,8 +3885,8 @@ func TestCUJ_B14_SharedHistoryAndSelectionAcrossRestart(t *testing.T) {
 	}
 	for i, entry := range entries[1:] {
 		lines := strings.Split(strings.TrimPrefix(entry, "> 当前会话\n"), "\n")
-		if len(lines) != 2 || !strings.HasPrefix(strings.TrimPrefix(lines[1], "> "), "`") {
-			t.Fatalf("entry %d must put ID directly below title: %s", i+1, entry)
+		if len(lines) != 3 || lines[1] != []string{"2 条消息", "0 条消息"}[i] || !strings.HasPrefix(lines[2], "`") {
+			t.Fatalf("entry %d must show title, persisted message count, then ID: %s", i+1, entry)
 		}
 	}
 	rendered := MarkdownToSimpleHTML(listing)
@@ -3896,6 +3896,22 @@ func TestCUJ_B14_SharedHistoryAndSelectionAcrossRestart(t *testing.T) {
 	quoted := strings.Split(strings.Split(rendered, "<blockquote>")[1], "</blockquote>")[0]
 	if quoted != "当前会话" {
 		t.Fatalf("quote must contain only the current label: %s", quoted)
+	}
+
+	queueMessage(e, p, "bob", "count-running", "question beta")
+	betaRun := nextQueueSession(t, a)
+	<-betaRun.sent
+	queueMessage(e, p, "bob", "count-pending", "/list")
+	sent = p.getSent()
+	if !strings.Contains(sent[len(sent)-1], "**「Beta」**\n0 条消息\n`") {
+		t.Fatal("unfinished task counted as history", sent[len(sent)-1])
+	}
+	betaRun.events <- Event{Type: EventResult, Done: true, Content: "answer beta"}
+	waitQueue(t, func() bool { return strings.Contains(strings.Join(p.getSent(), "\n"), "answer beta") })
+	queueMessage(e, p, "bob", "count-completed", "/list")
+	sent = p.getSent()
+	if !strings.Contains(sent[len(sent)-1], "**「Beta」**\n2 条消息\n`") {
+		t.Fatal("completed messages not counted", sent[len(sent)-1])
 	}
 
 	e.ReceiveMessage(p, &Message{Platform: "test", SharedScope: "other-group", SessionKey: "bob", UserID: "bob", MessageID: "9", Content: "/history", ReplyCtx: "bob"})

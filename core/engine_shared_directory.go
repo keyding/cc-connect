@@ -27,8 +27,9 @@ func (e *Engine) handleSharedDirectory(p Platform, msg *Message, command string,
 	}
 	if command == "list" {
 		lines := []string{e.i18n.T(MsgSharedList)}
+		counts := e.sharedMessageCounts(msg.Platform, msg.SharedScope)
 		for i, s := range scope.Sessions {
-			entry := fmt.Sprintf("%d. %s\n`%s`", i+1, sharedSessionName(s.Name), s.ID)
+			entry := fmt.Sprintf("%d. %s\n%s\n`%s`", i+1, sharedSessionName(s.Name), e.i18n.Tf(MsgSharedMessageCount, counts[s.ID]), s.ID)
 			if s.ID == scope.Selections[msg.SessionKey] {
 				entry = "> " + e.i18n.T(MsgSharedCurrentLabel) + "\n" + entry
 			}

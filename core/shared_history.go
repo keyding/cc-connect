@@ -19,7 +19,7 @@ func (e *Engine) replySharedHistory(p Platform, msg *Message, session sharedSess
 	var entries []entry
 	e.sharedQueue.mu.Lock()
 	for _, r := range e.sharedQueue.requests {
-		if r.Session.ID != session.ID || r.Scope != msg.SharedScope || r.Platform != msg.Platform || r.Status != "completed" {
+		if r.Session.ID != session.ID || r.Scope != msg.SharedScope || r.Platform != msg.Platform || sharedHistoryMessageCount(r) == 0 {
 			continue
 		}
 		entries = append(entries, entry{r.ID, e.sharedHistoryUser(r)})
@@ -47,4 +47,27 @@ func (e *Engine) replySharedHistory(p Platform, msg *Message, session sharedSess
 		rendered = append(rendered, row.text)
 	}
 	e.reply(p, msg.ReplyCtx, fmt.Sprintf("%s\n\n%s\n\n%s", sharedSessionTitle(session.Name), e.i18n.Tf(MsgSharedHistoryHeader, len(entries)), strings.Join(rendered, "\n\n")))
+}
+
+// Count the same persisted user/assistant entries that /history exposes.
+func sharedHistoryMessageCount(r sharedRequest) int {
+	if r.Status != "completed" {
+		return 0
+	}
+	if r.Result != "" {
+		return 2
+	}
+	return 1
+}
+
+func (e *Engine) sharedMessageCounts(platform, scope string) map[string]int {
+	counts := map[string]int{}
+	e.sharedQueue.mu.Lock()
+	defer e.sharedQueue.mu.Unlock()
+	for _, r := range e.sharedQueue.requests {
+		if r.Platform == platform && r.Scope == scope {
+			counts[r.Session.ID] += sharedHistoryMessageCount(r)
+		}
+	}
+	return counts
 }
