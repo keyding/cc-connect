@@ -75,6 +75,12 @@ func (p *Platform) replyReference(msg *models.Message) *core.MessageReference {
 		return ref
 	}
 	reply := msg.ReplyToMessage
+	// Telegram can attach the forum topic's creation service message to an
+	// ordinary topic message. It is topic context, not a quoted Agent answer.
+	if reply != nil && msg.IsTopicMessage && msg.MessageThreadID > 0 &&
+		reply.ID == msg.MessageThreadID && reply.Chat.ID == msg.Chat.ID && reply.ForumTopicCreated != nil {
+		return nil
+	}
 	if reply == nil || reply.From == nil || reply.From.ID != self.ID || reply.ForwardOrigin != nil {
 		return nil
 	}
