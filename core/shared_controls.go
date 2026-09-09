@@ -123,29 +123,10 @@ func (e *Engine) sharedControlLocked(q *sharedQueue, scope sharedScope, msg *Mes
 	return e.i18n.T(MsgQueueStale), nil
 }
 
-func queueStatusKey(status string) MsgKey {
-	switch status {
-	case "queued":
-		return MsgQueueQueued
-	case "running":
-		return MsgQueueRunning
-	case "stopping":
-		return MsgQueueStoppingStatus
-	case "stopped":
-		return MsgQueueStopped
-	case "interrupted":
-		return MsgQueueInterrupted
-	case "cancelled":
-		return MsgQueueCancelledStatus
-	default:
-		return MsgQueueCompleted
-	}
-}
-
 func (e *Engine) sharedQueueView(q *sharedQueue, s sharedSession) string {
-	lines := []string{e.i18n.Tf(MsgQueueTitle, sharedSessionTitle(s.Name)+"\n", "`"+s.ID+"`")}
+	lines := []string{e.i18n.Tf(MsgQueueTitle, "「"+sharedDisplayLabel(s.Name)+"」", "`"+s.ID+"`")}
 	if r := q.uncertainAdmission; r != nil && r.Session.ID == s.ID {
-		lines = append(lines, e.i18n.Tf(MsgQueueEntry, r.ID, sharedUserLabel(*r), e.i18n.T(MsgRecoveryAdmissionStatus)))
+		lines = append(lines, e.i18n.Tf(MsgQueueEntry, r.ID, sharedUserLabel(*r), "❌")+" — "+e.i18n.T(MsgRecoveryAdmissionStatus))
 	}
 	if q.paused {
 		lines = append(lines, e.i18n.T(MsgSharedPaused))
@@ -154,16 +135,25 @@ func (e *Engine) sharedQueueView(q *sharedQueue, s sharedSession) string {
 		if r.Session.ID != s.ID {
 			continue
 		}
-		status := e.i18n.T(queueStatusKey(r.Status))
+		icon, detail := "❌", MsgKey("")
+		switch r.Status {
+		case "completed":
+			icon = "✅"
+		case "queued", "running":
+			icon = "⌛️"
+		case "stopping":
+			detail = MsgQueueStoppingStatus
+		case "interrupted":
+			detail = MsgQueueInterrupted
+		case "stopped":
+			detail = MsgQueueStopped
+		}
 		if r.Waiting && r.Status == "running" {
-			status = e.i18n.T(MsgInteractionWaiting)
+			detail = MsgInteractionWaiting
 		}
-		line := e.i18n.Tf(MsgQueueEntry, r.ID, sharedUserLabel(r), status)
-		if r.Status == "queued" {
-			line += "\n/cancel " + r.ID
-		}
-		if r.Status == "running" {
-			line += "\n/stop " + r.ID
+		line := e.i18n.Tf(MsgQueueEntry, r.ID, sharedUserLabel(r), icon)
+		if detail != "" {
+			line += " — " + e.i18n.T(detail)
 		}
 		if r.Status == "interrupted" {
 			line += "\n/resolve " + r.ID + "\n/continue " + r.ID
