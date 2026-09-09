@@ -2899,6 +2899,14 @@ func (e *Engine) handleMessage(p Platform, msg *Message) {
 
 	// Shared requests use stable identity and durable admission.
 	if msg.SharedScope != "" {
+		if msg.Interaction != nil {
+			e.handleSharedInteraction(p, msg, *msg.Interaction)
+			return
+		}
+		if msg.IsPermissionResponse {
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgInteractionStale))
+			return
+		}
 		if msg.AttachmentError != nil {
 			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgSharedNotAccepted))
 			return
@@ -6772,7 +6780,7 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 	args := parts[1:]
 
 	cmdID := matchPrefix(cmd, builtinCommands)
-	if msg.SharedScope != "" && (cmd == "queue" || cmd == "cancel" || cmd == "resume" || cmd == "resolve" || cmd == "continue") {
+	if msg.SharedScope != "" && (cmd == "approve" || cmd == "deny" || cmd == "answer" || cmd == "queue" || cmd == "cancel" || cmd == "resume" || cmd == "resolve" || cmd == "continue") {
 		cmdID = cmd
 	}
 
@@ -6811,6 +6819,8 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 
 	if msg.SharedScope != "" {
 		switch cmdID {
+		case "approve", "deny", "answer":
+			e.sharedInteractionCommand(p, msg, cmdID, args)
 		case "queue", "cancel", "stop", "resume", "resolve", "continue":
 			e.handleSharedControl(p, msg, cmdID, args)
 		case "new", "list", "switch", "name", "current":

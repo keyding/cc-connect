@@ -23,6 +23,7 @@ type sharedRequest struct {
 	Images                                                                []ImageAttachment
 	Files                                                                 []FileAttachment
 	Status                                                                string
+	Waiting                                                               bool
 	ExitConfirmed                                                         bool
 	ExecutorGroup                                                         int
 	ContinueWarned                                                        bool
@@ -40,6 +41,7 @@ type sharedQueue struct {
 	cancels            map[string]context.CancelFunc
 	writer             sharedSnapshotWriter
 	uncertainAdmission *sharedRequest
+	interactions       map[string]*sharedInteraction
 }
 
 func newSharedQueue(path string) *sharedQueue {
@@ -235,6 +237,7 @@ func (q *sharedQueue) finish(index int, history, result string, success bool, ex
 		r.HistoryID = history
 	}
 	r.Result = result
+	r.Waiting = false
 	stopped := r.Status == "stopping"
 	r.ExitConfirmed = exited
 	r.Status = "interrupted"

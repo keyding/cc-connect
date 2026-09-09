@@ -227,10 +227,29 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 	if preview != nil {
 		defer preview.discard()
 	}
+	var pending *sharedInteraction
+	defer func() { e.endSharedInteraction(pending) }()
+	var decisions <-chan PermissionResult
 	var texts strings.Builder
 	previewed := 0
 	for {
 		select {
+		case decision := <-decisions:
+			if ctx.Err() != nil || !e.sharedInteractionAuthorized(r) {
+				return texts.String(), "", false, fmt.Errorf("interaction no longer authorized")
+			}
+			if err := q.setWaiting(r.ID, false); err != nil {
+				return texts.String(), "", false, err
+			}
+			if err := as.RespondPermission(pending.event.RequestID, decision); err != nil {
+				return texts.String(), "", false, err
+			}
+			pending = nil
+			decisions = nil
+			if idle != nil {
+				idle.Reset(e.eventIdleTimeout)
+				idleCh = idle.C
+			}
 		case <-ctx.Done():
 			return texts.String(), "", false, ctx.Err()
 		case sendErr := <-sendDone:
@@ -241,7 +260,7 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 		case <-idleCh:
 			return texts.String(), "", false, fmt.Errorf("agent event idle timeout")
 		case event, ok := <-as.Events():
-			if idle != nil {
+			if idle != nil && pending == nil {
 				idle.Reset(e.eventIdleTimeout)
 			}
 			if !ok {
@@ -263,8 +282,19 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 					idle.Stop()
 					idleCh = nil
 				}
-				e.sharedReply(r, e.i18n.T(MsgSharedWaiting))
+				if pending != nil {
+					return texts.String(), "", false, fmt.Errorf("agent issued overlapping interactions")
+				}
+				var interactionErr error
+				pending, interactionErr = e.beginSharedInteraction(ctx, r, event)
+				if interactionErr != nil {
+					return texts.String(), "", false, interactionErr
+				}
+				decisions = pending.decisions
 			case EventResult:
+				if pending != nil {
+					return texts.String(), "", false, fmt.Errorf("agent ended before interaction was resolved")
+				}
 				if event.Error != nil {
 					return texts.String(), "", false, event.Error
 				}
