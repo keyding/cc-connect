@@ -216,6 +216,9 @@ func (e *Engine) runSharedAgent(r sharedRequest) (result, history string, exited
 		defer preview.discard()
 	}
 	result, err = e.collectSharedAgentOutput(ctx, r, as, sendDone, idle, preview)
+	if err == nil {
+		result = e.sharedResultWithFooter(r, as, result)
+	}
 	return result, "", false, err
 }
 
